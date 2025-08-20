@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Скрининг риска инфаркта</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v={{ version }}">
+</head>
+<body>
+  <main class="container">
+    <h1>Загрузите CSV для предсказания риска сердечного приступа</h1>
+
+    <form class="upload" action="/" method="post" enctype="multipart/form-data">
+      <label class="filebox">
+        <span>📁 Выберите CSV файл</span>
+        <input type="file" name="file" accept=".csv" required />
+      </label>
+      <button class="primary" type="submit">🧠 Сделать прогноз</button>
+    </form>
+
+    {% if error %}
+      <div class="alert error">❌ {{ error }}</div>
+    {% endif %}
+
+    {% if summary %}
+      <div class="alert ok">
+        ✅ Готово! Количество пациентов: <b>{{ summary.n_patients }}</b>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <span class="label">⚠️ Высокий риск:</span>
+          <b>{{ summary.n_high }}</b> ({{ "%.1f"|format(summary.p_high) }}%)
+        </div>
+        <div class="stat">
+          <span class="label">🟢 Риска нет:</span>
+          <b>{{ summary.n_low }}</b> ({{ "%.1f"|format(summary.p_low) }}%)
+        </div>
+        <div class="bar">
+          <span class="high" style="width: {{ summary.p_high }}%"></span>
+          <span class="low"  style="width: {{ summary.p_low }}%"></span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <a class="secondary" href="/download">⬇️ Скачать результаты (CSV)</a>
+      </div>
+
+      <div class="list">
+        {% for row in rows %}
+          <div class="item">
+            <div class="left">Пациент {{ row.idx }}</div>
+            {% if row.pred == 1 %}
+              <div class="badge danger">⚠️ ВЫСОКИЙ РИСК</div>
+            {% else %}
+              <div class="badge safe">🟢 РИСКА НЕТ</div>
+            {% endif %}
+            <div class="proba">p = {{ "%.3f"|format(row.proba) }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <footer></footer>
+  </main>
+</body>
+</html>
+

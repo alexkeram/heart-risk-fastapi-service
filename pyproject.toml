@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "heart-risk-classification"
+version = "0.1.0"
+description = "Heart risk classification FastAPI app"
+authors = [
+  { name="Alex Zhuravlev" }
+]
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "pandas",
+  "catboost",
+  "scikit-learn",
+  "joblib"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

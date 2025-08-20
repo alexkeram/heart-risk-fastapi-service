@@ -13,39 +13,59 @@ from heart_runner import HeartRiskRunner, RunCfg
 
 class HeartRiskJob:
     """
-    Оркестратор: EDA -> обучение (CV) -> выбор лучшей -> сохранение -> ОТЧЁТ в Jupyter.
+    Верхнеуровневый оркестратор эксперимента:
+    1) Прогоняет EDA (через EDAAnalyzer),
+    2) Запускает кросс-валидацию моделей и выбирает лучшую (HeartRiskRunner),
+    3) Формирует отчёт в Jupyter (таблицы метрик, лучшая модель, список комбинаций),
+    4) При необходимости сохраняет обученную модель и метаданные в папку artifacts (корень проекта).
     """
 
-    def __init__(self, cfg: RunCfg | None = None, artifacts_dir: str | Path = "artifacts"):
+    def __init__(self, cfg: RunCfg | None = None, artifacts_dir: str | Path | None = None):
         self.cfg = cfg or RunCfg()
-        self.artifacts_dir = Path(artifacts_dir)
+
+        # вычисляем корень проекта (папка выше src)
+        project_root = Path(__file__).resolve().parents[2]
+        default_artifacts = project_root / "artifacts"
+
+        if artifacts_dir is None:
+            self.artifacts_dir = default_artifacts
+        else:
+            ad = Path(artifacts_dir)
+            self.artifacts_dir = ad if ad.is_absolute() else (project_root / ad)
+
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
+        # служебные поля
         self._runner: HeartRiskRunner | None = None
         self._out: dict | None = None
         self.best_artifacts: dict | None = None
 
-        # для последующего доступа в ноутбуке
+        # отчёт (для последующего доступа в ноутбуке)
         self.report_all: pd.DataFrame | None = None
         self.report_best: pd.DataFrame | None = None
         self.trained_list: list[str] | None = None
 
     def run(self, train_df_raw: pd.DataFrame, target_col: str = "Heart Attack Risk (Binary)") -> dict:
-        """Полный прогон без сохранения. Формирует отчёт в ноутбуке, возвращает out."""
+        """
+        Полный прогон без сохранения.
+        """
         train_df = EDAAnalyzer(train_df_raw, target_col=target_col).process()
         self._runner = HeartRiskRunner(self.cfg)
         self._out = self._runner.run_all(train_df)
         self.best_artifacts = self._out["artifacts"]
 
-        # построить фреймы отчёта и вывести
+        # отчёты
         self._build_report_frames(self._out)
         self.show_report()
         return self._out
 
     def save(self) -> dict:
-        """Сохранение модели и метаданных."""
+        """
+        Сохраняет лучшую модель и метаданные в <корень проекта>/artifacts.
+        В метаданных путь к модели — только имя файла.
+        """
         if not self.best_artifacts:
-            raise RuntimeError("Nothing to save: call run(...) first.")
+            raise RuntimeError("Нечего сохранять: вызовите run(...) перед save().")
 
         ba = self.best_artifacts
         meta = {
@@ -55,6 +75,7 @@ class HeartRiskJob:
             "threshold": float(ba["threshold"]),
         }
 
+        # сохраняем модель
         if ba["model_key"] == "cat":
             model_path = self.artifacts_dir / "best_model.cbm"
             ba["model"].save_model(str(model_path))
@@ -62,20 +83,29 @@ class HeartRiskJob:
             model_path = self.artifacts_dir / "best_model.joblib"
             joblib.dump(ba["model"], model_path)
 
-        meta["model_path"] = str(model_path)
-        with open(self.artifacts_dir / "best_meta.json", "w", encoding="utf-8") as f:
+        # в meta только имя файла
+        meta["model_path"] = model_path.name
+
+        # сохраняем метаданные
+        meta_path = self.artifacts_dir / "best_meta.json"
+        with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
 
-        display(Markdown("**Сохранено артефакты**:\n\n```json\n" +
-                         json.dumps(meta, ensure_ascii=False, indent=2) + "\n```"))
+        display(Markdown(
+            "**Сохранены артефакты**:\n\n```json\n" +
+            json.dumps(meta, ensure_ascii=False, indent=2) +
+            "\n```"
+        ))
         return meta
 
     def run_and_save(self, train_df_raw: pd.DataFrame, target_col: str = "Heart Attack Risk (Binary)") -> dict:
-        """Запустить, вывести отчёт, затем сохранить модель. Возвращает meta."""
+        """
+        Запускает полный прогон и сразу сохраняет модель.
+        """
         self.run(train_df_raw, target_col=target_col)
         return self.save()
 
-    # ---------- отчёт: сборка и показ ----------
+    # ---------- служебные методы для отчёта ----------
 
     def _build_report_frames(self, out: dict) -> None:
         rows = []
@@ -116,13 +146,9 @@ class HeartRiskJob:
         self.trained_list = [f"{m} | {s}" for m, s in combos.to_records(index=False)]
 
     def show_report(self) -> None:
-        """Показывает отчёт в ноутбуке """
         if self.report_all is None or self.report_best is None:
             return
         display(Markdown("### РЕЗУЛЬТАТЫ (CV, OoF)"))
         display(self.report_all)
-        if self.trained_list:
-            display(Markdown("### Список обученных комбинаций"))
-            display(Markdown(", ".join(self.trained_list)))
         display(Markdown("### Лучшая модель"))
         display(self.report_best)

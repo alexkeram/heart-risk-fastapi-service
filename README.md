@@ -199,3 +199,4 @@ curl -X POST http://127.0.0.1:8000/api/predict ^
 - Код приложения и библиотеки (`src/`, `app/`);
 - Инструкция по запуску (этот README);
 - Воспроизводимость: `requirements.txt`.
+- Файл с предсказаниями predictions.csv в папке submissions

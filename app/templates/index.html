@@ -1,22 +1,22 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Скрининг риска инфаркта</title>
+  <title>Heart Attack Risk Screening</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v={{ version }}">
 </head>
 <body>
   <main class="container">
-    <h1>Загрузите CSV для предсказания риска сердечного приступа</h1>
+    <h1>Upload a CSV to predict heart attack risk</h1>
 
     <form class="upload" action="/" method="post" enctype="multipart/form-data">
       <label class="filebox">
-        <span>📁 Выберите CSV файл</span>
+        <span>📁 Choose a CSV file</span>
         <input type="file" name="file" accept=".csv" required />
       </label>
-      <button class="primary" type="submit">🧠 Сделать прогноз</button>
+      <button class="primary" type="submit">🧠 Run prediction</button>
     </form>
 
     {% if error %}
@@ -25,16 +25,16 @@
 
     {% if summary %}
       <div class="alert ok">
-        ✅ Готово! Количество пациентов: <b>{{ summary.n_patients }}</b>
+        ✅ Done! Number of patients: <b>{{ summary.n_patients }}</b>
       </div>
 
       <div class="stats">
         <div class="stat">
-          <span class="label">⚠️ Высокий риск:</span>
+          <span class="label">⚠️ High risk:</span>
           <b>{{ summary.n_high }}</b> ({{ "%.1f"|format(summary.p_high) }}%)
         </div>
         <div class="stat">
-          <span class="label">🟢 Риска нет:</span>
+          <span class="label">🟢 No risk:</span>
           <b>{{ summary.n_low }}</b> ({{ "%.1f"|format(summary.p_low) }}%)
         </div>
         <div class="bar">
@@ -44,17 +44,17 @@
       </div>
 
       <div class="actions">
-        <a class="secondary" href="/download">⬇️ Скачать результаты (CSV)</a>
+        <a class="secondary" href="/download">⬇️ Download results (CSV)</a>
       </div>
 
       <div class="list">
         {% for row in rows %}
           <div class="item">
-            <div class="left">Пациент {{ row.idx }}</div>
+            <div class="left">Patient {{ row.idx }}</div>
             {% if row.pred == 1 %}
-              <div class="badge danger">⚠️ ВЫСОКИЙ РИСК</div>
+              <div class="badge danger">⚠️ HIGH RISK</div>
             {% else %}
-              <div class="badge safe">🟢 РИСКА НЕТ</div>
+              <div class="badge safe">🟢 NO RISK</div>
             {% endif %}
             <div class="proba">p = {{ "%.3f"|format(row.proba) }}</div>
           </div>

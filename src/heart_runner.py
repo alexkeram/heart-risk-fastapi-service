@@ -1,23 +1,23 @@
-# файл: src/heart_runner.py
+# file: src/heart_runner.py
 from __future__ import annotations
 """
-HeartRiskRunner — ядро обучения и отбора лучшей модели
+HeartRiskRunner — core for training and selecting the best model.
 
-Что это:
-    Модуль подбирает лучшую модель бинарной классификации риска инфаркта
-    по кросс-валидации и считает метрики/доверительные интервалы, а затем
-    дообучает выбранную модель на всём трейне и вычисляет SHAP-вклады.
+Overview:
+    The module searches for the best binary classifier of heart attack risk
+    via cross-validation, computes metrics and confidence intervals, then
+    trains the selected model on the full train set and calculates SHAP values.
 
-Сценарии:
-    • "no_leak"   — обучаем без «утечек» (колонки из cfg.leaks исключены);
-    • "with_leak" — обучаем со всеми признаками.
+Scenarios:
+    • "no_leak"   — train without leakage features (columns from cfg.leaks excluded);
+    • "with_leak" — train with all features.
 
-Модели:
-    • CatBoostClassifier     (ключ "cat") — нативные категориальные;
-    • HistGradientBoosting   (ключ "hgb") — через OHE;
-    • RandomForestClassifier (ключ "rf")  — через OHE.
+Models:
+    • CatBoostClassifier     (key "cat") — native categorical support;
+    • HistGradientBoosting   (key "hgb") — via OHE;
+    • RandomForestClassifier (key "rf")  — via OHE.
 
-Как пользоваться (пример):
+Usage example:
     >>> import pandas as pd
     >>> from heart_runner import HeartRiskRunner, RunCfg
     >>> df = pd.read_csv("data/heart_train.csv")
@@ -28,28 +28,28 @@ HeartRiskRunner — ядро обучения и отбора лучшей мо�
     dict_keys(['results', 'best', 'artifacts'])
     >>> out["best"]["model_key"], out["best"]["scenario"], out["best"]["m"]["F2"]
     ('hgb', 'no_leak', 0.7)
-    >>> # обученная лучшая модель и мета:
+    >>> # trained best model and metadata:
     >>> art = out["artifacts"]
     >>> art["model"], art["features"][:5], art["threshold"]
 
-Структура результата:
+Result structure:
     out = {
-      "results": [                     # список по всем (сценарий × модель)
+      "results": [                     # list of all (scenario × model)
          {
            "model_key": "cat|hgb|rf",
            "model_name": "CatBoost|HistGB|RandomForest",
            "scenario": "no_leak|with_leak",
-           "features": [...],          # какие фичи использовались в этом запуске
-           "cats": [...],              # какие фичи трактовались как категориальные
-           "oof": np.ndarray,          # OoF-вероятности (длины len(y))
-           "thr": float,               # оптимальный порог по F_beta (на OoF)
-           "m": {                      # метрики на OoF при thr
+           "features": [...],          # features used in this run
+           "cats": [...],              # features treated as categorical
+           "oof": np.ndarray,          # OoF probabilities (length len(y))
+           "thr": float,               # optimal F_beta threshold (on OoF)
+           "m": {                      # OoF metrics at thr
              "F1", "F2", "ROC_AUC", "PR_AUC",
              "Precision", "Recall",
              "TN", "FP", "FN", "TP",
              "threshold"
            },
-           "ci": {                     # бутстреп-ДИ (2.5%, 97.5%)
+           "ci": {                     # bootstrap CI (2.5%, 97.5%)
              "F1": (lo, hi),
              "F2": (lo, hi),
              "ROC_AUC": (lo, hi),
@@ -58,23 +58,23 @@ HeartRiskRunner — ядро обучения и отбора лучшей мо�
          },
          ...
       ],
-      "best": {... как один из results, лучший по F2 ...},
-      "artifacts": {                   # обучено на всём трейне
-        "model": sklearn/CB модель или Pipeline,
+      "best": {... one of results, best by F2 ...},
+      "artifacts": {                   # trained on the full train
+        "model": sklearn/CB model or Pipeline,
         "model_key": "cat|hgb|rf",
-        "features": [...],             # финальный набор колонок
-        "cats": [...],                 # финальные категориальные
-        "threshold": float,            # оптимальный порог с OoF лучшей
-        "shap_top": pd.Series          # топ-20 по |SHAP|
+        "features": [...],             # final set of columns
+        "cats": [...],                 # final categorical features
+        "threshold": float,            # optimal threshold from best OoF
+        "shap_top": pd.Series          # top-20 by |SHAP|
       }
     }
 
-Зависимости:
+Dependencies:
     numpy, pandas, scikit-learn, catboost, shap
 
-Безопасность/воспроизводимость:
-    • Фиксированный seed из RunCfg.seed делает разбиения и обучение повторяемыми.
-    • Порог подбирается по OoF-предсказаниям (устойчивее простого hold-out).
+Reproducibility:
+    • Fixed seed from RunCfg.seed makes splits and training repeatable.
+    • Threshold is tuned on OoF predictions (more stable than hold-out).
 """
 
 import numpy as np
@@ -96,21 +96,21 @@ import shap
 from catboost import CatBoostClassifier, Pool
 
 
-# =============================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===============================
+# =============================== HELPER FUNCTIONS ===============================
 
 def _cat_cols(df: pd.DataFrame) -> List[str]:
-    """Возвращает список категориальных столбцов (dtype == 'category' или 'object')."""
+    """Return a list of categorical columns (dtype == 'category' or 'object')."""
     return [c for c in df.columns if str(df[c].dtype) in ("category", "object")]
 
 def _class_w(y: pd.Series) -> Dict[int, float]:
-    """Считает веса классов ~ 0.5 / P(class), чтобы сбалансировать потери по классам."""
+    """Compute class weights ~ 0.5 / P(class) to balance class losses."""
     p = y.mean()
     return {0: 0.5 / (1 - p + 1e-12), 1: 0.5 / (p + 1e-12)}
 
 def _make_ohe():
     """
-    Создаёт OneHotEncoder с обратной совместимостью по параметру sparse_output.
-    (в старых версиях sklearn используется `sparse`, в новых - `sparse_output`).
+    Create OneHotEncoder with backward compatibility for the sparse_output parameter
+    (older sklearn uses `sparse`, newer uses `sparse_output`).
     """
     try:
         return OneHotEncoder(handle_unknown="ignore", sparse_output=False, dtype=np.float32)
@@ -118,7 +118,7 @@ def _make_ohe():
         return OneHotEncoder(handle_unknown="ignore", sparse=False, dtype=np.float32)
 
 def _to_str_matrix(X):
-    """Приводит матрицу/фрейм к строковому типу (нужно для корректного OHE)."""
+    """Convert matrix/frame to string type (needed for proper OHE)."""
     if isinstance(X, pd.DataFrame):
         return X.astype(str)
     X = np.asarray(X)
@@ -126,9 +126,9 @@ def _to_str_matrix(X):
 
 def _make_cat_preproc(cats: List[str]) -> ColumnTransformer:
     """
-    Пайплайн препроцессинга для деревьев без нативной поддержки категорий:
-      • для категориальных: преобразовать к строкам и OHE;
-      • для остальных: пропускать без изменений.
+    Preprocessing pipeline for tree models without native categorical support:
+      • for categorical: convert to strings and OHE;
+      • for others: pass through unchanged.
     """
     to_str = FunctionTransformer(_to_str_matrix, validate=False, feature_names_out="one-to-one")
     return ColumnTransformer(
@@ -138,7 +138,7 @@ def _make_cat_preproc(cats: List[str]) -> ColumnTransformer:
     )
 
 def _tune_thr_fbeta(y_true, p, beta: float, grid=np.linspace(0.01, 0.99, 99)) -> Tuple[float, float]:
-    """Подбор порога по максимизации F_beta на сетке значений. Возвращает (best_threshold, best_score)."""
+    """Select threshold maximizing F_beta on a value grid. Returns (best_threshold, best_score)."""
     best_t, best = -1.0, -1.0
     for t in grid:
         s = fbeta_score(y_true, (p >= t).astype(int), beta=beta, zero_division=0)
@@ -147,7 +147,7 @@ def _tune_thr_fbeta(y_true, p, beta: float, grid=np.linspace(0.01, 0.99, 99)) ->
     return float(best_t), float(best)
 
 def _metrics(y_true, p, thr: float, beta: float) -> Dict[str, float]:
-    """Считает набор метрик при фиксированном пороге thr."""
+    """Compute metrics at a fixed threshold thr."""
     pred = (p >= thr).astype(int)
     tn, fp, fn, tp = confusion_matrix(y_true, pred, labels=[0, 1]).ravel()
     return dict(
@@ -163,8 +163,8 @@ def _metrics(y_true, p, thr: float, beta: float) -> Dict[str, float]:
 
 def _boot_ci(y_true, p, thr, metric: str, n: int, seed: int, beta: float) -> Tuple[float, float]:
     """
-    Бутстреп-ДИ для метрик: оценивает 2.5 и 97.5 перцентили по n перезапускам с возвращением.
-    Возвращает (lo, hi).
+    Bootstrap confidence interval for metrics: evaluates 2.5 and 97.5 percentiles
+    over n resamples with replacement. Returns (lo, hi).
     """
     rng = np.random.default_rng(seed)
     y_true = np.asarray(y_true)
@@ -186,8 +186,8 @@ def _boot_ci(y_true, p, thr, metric: str, n: int, seed: int, beta: float) -> Tup
 
 def _shap_to_2d(shap_vals: np.ndarray | list) -> np.ndarray:
     """
-    Приводит SHAP-значения к 2D-матрице [n_samples, n_features].
-    У CatBoost/деревьев форма может быть [n, 1/2, d] или [n, d, 1/2] — выбираем нужную ось.
+    Convert SHAP values to a 2D matrix [n_samples, n_features].
+    For CatBoost/trees shape may be [n, 1/2, d] or [n, d, 1/2] — choose appropriate axis.
     """
     if isinstance(shap_vals, list):
         arr = np.asarray(shap_vals[1] if len(shap_vals) > 1 else shap_vals[0])
@@ -209,7 +209,7 @@ def _shap_to_2d(shap_vals: np.ndarray | list) -> np.ndarray:
     return arr
 
 def _make_cat() -> CatBoostClassifier:
-    """Базовая конфигурация CatBoostClassifier под задачу логлосса + ранняя остановка."""
+    """Basic CatBoostClassifier config for logloss with early stopping."""
     return CatBoostClassifier(
         depth=6, learning_rate=0.05, iterations=600,
         l2_leaf_reg=3.0, random_seed=42,
@@ -218,29 +218,29 @@ def _make_cat() -> CatBoostClassifier:
     )
 
 def _make_rf() -> RandomForestClassifier:
-    """RandomForest с балансировкой классов, достаточно большим числом деревьев и фиксированным seed."""
+    """RandomForest with class balancing, many trees, and fixed seed."""
     return RandomForestClassifier(n_estimators=500, class_weight="balanced", n_jobs=-1, random_state=42)
 
 def _make_hgb() -> HistGradientBoostingClassifier:
-    """HistGradientBoosting — быстрый бустинг по гистограммам; параметры — умеренно консервативные."""
+    """HistGradientBoosting — fast histogram-based boosting; parameters are moderately conservative."""
     return HistGradientBoostingClassifier(learning_rate=0.05, max_iter=400, random_state=42)
 
 
-# =============================== ОСНОВНОЙ КЛАСС ===============================
+# =============================== MAIN CLASS ===============================
 
 @dataclass
 class RunCfg:
     """
-    Конфигурация прогона.
+    Run configuration.
 
-    Параметры:
-        target:   имя целевой колонки (0/1).
-        leaks:    признаки-«утечки», которые исключаются в сценарии 'no_leak'.
-        seed:     фиксированный seed для воспроизводимости.
-        splits:   число фолдов в StratifiedKFold.
-        beta:     бета в F-beta (beta>1 — сильнее штрафуем FN, повышаем Recall).
-        boot_n:   число бутстреп-перезапусков для доверительных интервалов метрик.
-        shap_n:   размер случайного поднабора для расчёта SHAP (ускоряет расчёт).
+    Parameters:
+        target:   name of target column (0/1).
+        leaks:    leakage features excluded in the 'no_leak' scenario.
+        seed:     fixed seed for reproducibility.
+        splits:   number of folds in StratifiedKFold.
+        beta:     beta in F-beta (beta>1 penalizes FN more, increases Recall).
+        boot_n:   number of bootstrap resamples for metric CIs.
+        shap_n:   size of random subset for SHAP calculation (speeds up computation).
     """
     target: str = "Heart Attack Risk (Binary)"
     leaks: Tuple[str, ...] = ('Troponin', 'CK-MB', 'Previous Heart Problems', 'Medication Use')
@@ -248,24 +248,24 @@ class RunCfg:
     splits: int = 3
     beta: float = 2.0
     boot_n: int = 100
-    shap_n: int = 200  # сэмпл для SHAP
+    shap_n: int = 200  # sample size for SHAP
 
 class HeartRiskRunner:
     """
-    Запускатель экспериментов: готовит данные, гоняет модели по сценариям, выбирает лучшую и
-    дообучает её на всех данных. Возвращает словари с OoF-прогнозами, метриками, ДИ и артефактами.
+    Experiment launcher: prepares data, runs models across scenarios, selects the best,
+    and trains it on all data. Returns dictionaries with OoF predictions, metrics, CIs and artifacts.
     """
 
     def __init__(self, cfg: RunCfg):
-        """Сохраняет конфигурацию и инициализирует генератор случайности."""
+        """Store configuration and initialize random generator."""
         self.cfg = cfg
         self.rng = np.random.default_rng(cfg.seed)
 
     def prepare(self, train_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
         """
-        Готовит X и y из входного фрейма:
-            • y — целевая колонка cfg.target, приведённая к int {0,1};
-            • X — остальные признаки.
+        Prepare X and y from the input frame:
+            • y — target column cfg.target converted to int {0,1};
+            • X — remaining features.
         """
         prep = train_df.copy()
         y = pd.to_numeric(prep[self.cfg.target], errors="coerce").round().astype(int)
@@ -274,17 +274,17 @@ class HeartRiskRunner:
 
     def eval_cv(self, model_key: str, X: pd.DataFrame, y: pd.Series, cats: List[str]) -> Dict:
         """
-        Кросс-валидация для заданной модели:
-            • считает OoF-прогнозы,
-            • подбирает порог по F_beta,
-            • считает метрики на OoF и бутстреп-ДИ.
+        Cross-validation for a given model:
+            • compute OoF predictions,
+            • tune threshold by F_beta,
+            • compute OoF metrics and bootstrap CIs.
 
-        Аргументы:
+        Args:
             model_key: 'cat' | 'rf' | 'hgb'
-            X, y:      матрица признаков и целевая
-            cats:      имена категориальных колонок
+            X, y:      feature matrix and target
+            cats:      names of categorical columns
 
-        Возвращает dict: {oof, thr, m, ci}.
+        Returns dict: {oof, thr, m, ci}.
         """
         skf = StratifiedKFold(n_splits=self.cfg.splits, shuffle=True, random_state=self.cfg.seed)
         oof = np.zeros(len(X))
@@ -296,7 +296,7 @@ class HeartRiskRunner:
             ytr, yva = y.iloc[tr], y.iloc[va]
 
             if model_key == "cat":
-                # CatBoost: нативные категориальные + балансировка класса
+                # CatBoost: native categorical handling + class balancing
                 m = _make_cat()
                 pos, neg = ytr.sum(), len(ytr) - ytr.sum()
                 m.set_params(scale_pos_weight=(neg / (pos + 1e-12)))
@@ -306,13 +306,13 @@ class HeartRiskRunner:
                 pr = m.predict_proba(pool_va)[:, 1]
 
             elif model_key == "rf":
-                # RandomForest: OHE для категорий + вероятности положительного класса
+                # RandomForest: OHE for categories + positive class probabilities
                 m = Pipeline([("pre", pre), ("clf", _make_rf())])
                 m.fit(Xtr, ytr)
                 pr = m.predict_proba(Xva)[:, 1]
 
             else:  # hgb
-                # HistGB: OHE + sample_weight на основе class weights
+                # HistGB: OHE + sample_weight based on class weights
                 m = Pipeline([("pre", pre), ("clf", _make_hgb())])
                 sw = ytr.map(_class_w(ytr)).values
                 m.fit(Xtr, ytr, clf__sample_weight=sw)
@@ -320,7 +320,7 @@ class HeartRiskRunner:
 
             oof[va] = pr
 
-        # Подбор порога по F_beta и расчёт метрик + ДИ
+        # Threshold tuning by F_beta and calculation of metrics + CIs
         thr, _ = _tune_thr_fbeta(y, oof, self.cfg.beta)
         m_oof = _metrics(y, oof, thr, self.cfg.beta)
         ci = {k: _boot_ci(y, oof, thr, k, self.cfg.boot_n, self.cfg.seed, self.cfg.beta)
@@ -329,16 +329,16 @@ class HeartRiskRunner:
 
     def run_all(self, train_df: pd.DataFrame) -> Dict:
         """
-        Полный прогон по двум сценариям (без утечек / с утечками) и трём моделям (CatBoost, HistGB, RF).
+        Full run across two scenarios (without/with leaks) and three models (CatBoost, HistGB, RF).
 
-        Возвращает словарь:
+        Returns dict:
             {
-              "results": [ ... по всем комбинациям ... ],
-              "best":    { ... лучшая по F2 ... },
-              "artifacts": { ... обученная лучшая модель, порог, shap_top ... }
+              "results": [ ... over all combinations ... ],
+              "best":    { ... best by F2 ... },
+              "artifacts": { ... trained best model, threshold, shap_top ... }
             }
         """
-        # 1) подготовка данных
+        # 1) data preparation
         X_full, y = self.prepare(train_df)
         scenarios = {
             "no_leak": [c for c in X_full.columns if c not in self.cfg.leaks],
@@ -355,39 +355,39 @@ class HeartRiskRunner:
                 results.append({"model_key": mk, "model_name": mn, "scenario": scen,
                                 "features": cols, "cats": cats, **r})
 
-        # 2) выбор лучшей по F2
+        # 2) select best by F2
         best = max(results, key=lambda z: z["m"]["F2"])
 
-        # 3) дообучение лучшей на полном train + SHAP
+        # 3) train best on full train + SHAP
         artifacts = self.fit_best(X_full, y, best)
         return {"results": results, "best": best, "artifacts": artifacts}
 
     def fit_best(self, X_full: pd.DataFrame, y: pd.Series, best: Dict) -> Dict:
         """
-        Дообучает лучшую комбинацию на всех данных и считает топ-вкладов по SHAP.
+        Train the best combination on all data and compute top SHAP contributions.
 
-        Возвращает артефакты:
+        Returns artifacts:
             {
-              "model": обученный estimator/пайтлайн,
-              "model_key": ключ модели,
-              "features": использованные признаки,
-              "cats": список категориальных,
-              "threshold": оптимальный порог по OoF,
-              "shap_top": pd.Series топ признаков по |SHAP|
+              "model": trained estimator/pipeline,
+              "model_key": model key,
+              "features": used features,
+              "cats": list of categorical features,
+              "threshold": optimal threshold from OoF,
+              "shap_top": pd.Series of top features by |SHAP|
             }
         """
         Xb = X_full[best["features"]].copy()
         cats = best["cats"]
 
         if best["model_key"] == "cat":
-            # CatBoost с балансировкой и нативными cat_features
+            # CatBoost with class balancing and native cat_features
             mdl = _make_cat()
             pos, neg = y.sum(), len(y) - y.sum()
             mdl.set_params(scale_pos_weight=(neg / (pos + 1e-12)))
             pool = Pool(Xb, label=y, cat_features=[Xb.columns.get_loc(c) for c in cats])
             mdl.fit(pool, verbose=False)
 
-            # SHAP для CatBoost: забираем матрицу без последнего столбца base value
+            # SHAP for CatBoost: take matrix without last base value column
             idx = self.rng.choice(len(Xb), size=min(self.cfg.shap_n, len(Xb)), replace=False)
             pool_shap = Pool(Xb.iloc[idx], label=y.iloc[idx], cat_features=[Xb.columns.get_loc(c) for c in cats])
             shap_vals = mdl.get_feature_importance(pool_shap, type="ShapValues")[:, :-1]
@@ -396,7 +396,7 @@ class HeartRiskRunner:
             shap_top = s.head(20)
 
         else:
-            # Для RF/HGB используем препроцессор (OHE) + TreeExplainer
+            # For RF/HGB use preprocessor (OHE) + TreeExplainer
             pre = _make_cat_preproc(cats)
             if best["model_key"] == "rf":
                 base = _make_rf()

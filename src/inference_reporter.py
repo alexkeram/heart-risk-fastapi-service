@@ -1,20 +1,20 @@
-# файл: src/inference_reporter.py
+# file: src/inference_reporter.py
 """
-SimpleInferenceSummary — минимальный отчёт по инференсу.
+SimpleInferenceSummary — minimal inference report.
 
-Что делает:
-  • Вызывает inf.predict(df), читает inf.threshold.
-  • Печатает только базовую сводку в формате:
+What it does:
+  • Calls inf.predict(df), reads inf.threshold.
+  • Prints only a basic summary in the format:
 
-    === ИНФЕРЕНС: сводка ===
-    Объектов: <N>
-    Порог   : <threshold>
-    Класс '1': <n_pos> (<pct_pos>%)
-    Класс '0': <n_neg> (<pct_neg>%)
+    === INFERENCE: summary ===
+    Objects: <N>
+    Threshold: <threshold>
+    Class '1': <n_pos> (<pct_pos>%)
+    Class '0': <n_neg> (<pct_neg>%)
 
-Где:
-  - inf — объект с методами/полями: predict(df) -> DataFrame[c("proba","prediction")], threshold: float
-  - df  — DataFrame с сырыми данными для инференса
+Where:
+  - inf — object with methods/fields: predict(df) -> DataFrame[c("proba","prediction")], threshold: float
+  - df  — DataFrame with raw data for inference
 
 """
 
@@ -24,22 +24,22 @@ import pandas as pd
 
 
 class SimpleInferenceSummary:
-    """Печатает и (опционально) возвращает краткую сводку по инференсу."""
+    """Print and optionally return a brief inference summary."""
 
     @staticmethod
     def run(inf, df: pd.DataFrame, *, print_summary: bool = True) -> Dict[str, Any]:
         """
-        Выполняет инференс и печатает краткую сводку.
+        Run inference and print a short summary.
 
         Args:
-            inf: объект с .predict(df) и .threshold
-            df : DataFrame для инференса
-            print_summary: печатать ли сводку (True по умолчанию)
+            inf: object with .predict(df) and .threshold
+            df : DataFrame for inference
+            print_summary: whether to print the summary (True by default)
 
         Returns:
-            dict с ключами: n, threshold, n_pos, n_neg, pos_rate
+            dict with keys: n, threshold, n_pos, n_neg, pos_rate
         """
-        preds = inf.predict(df)  # ожидаются колонки: proba, prediction
+        preds = inf.predict(df)  # expected columns: proba, prediction
         yhat = preds["prediction"].astype(int)
         thr = float(getattr(inf, "threshold", 0.5))
 
@@ -50,11 +50,11 @@ class SimpleInferenceSummary:
         neg_rate = 1.0 - pos_rate
 
         if print_summary:
-            print("=== ИНФЕРЕНС: сводка ===")
-            print(f"Объектов: {n}")
-            print(f"Порог   : {thr:.3f}")
-            print(f"Класс '1': {n_pos} ({pos_rate*100:.2f}%)")
-            print(f"Класс '0': {n_neg} ({neg_rate*100:.2f}%)")
+            print("=== INFERENCE: summary ===")
+            print(f"Objects : {n}")
+            print(f"Threshold: {thr:.3f}")
+            print(f"Class '1': {n_pos} ({pos_rate*100:.2f}%)")
+            print(f"Class '0': {n_neg} ({neg_rate*100:.2f}%)")
 
         return {
             "n": n,

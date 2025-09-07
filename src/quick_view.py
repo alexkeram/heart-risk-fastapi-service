@@ -1,42 +1,41 @@
-# файл: src/quick_view.py
+# file: src/quick_view.py
 """
-QuickView — утилита для быстрого DataFrame.
+QuickView — utility for quick DataFrame exploration.
 
-Назначение
-----------
-Класс помогает быстро получить первичное представление о данных:
-- общий обзор структуры и пропусков;
-- детальная сводка (describe, min/max), частоты категориальных/низко-кардинальных признаков,
-  корреляции с таргетом;
-- базовые графики распределений (hist) и boxplot'ы по классам таргета.
+Purpose
+-------
+Provides a rapid initial understanding of data:
+- overall structure and missing values;
+- detailed summary (describe, min/max), frequencies of categorical/low-cardinality features,
+  correlations with the target;
+- basic distribution plots (hist) and boxplots by target classes.
 
-Зависимости
------------
-- pandas (как источник DataFrame)
-- matplotlib (для графиков)
+Dependencies
+------------
+- pandas (source of DataFrame)
+- matplotlib (for plots)
 
-Установка (если нужно):
+Installation (if needed):
     pip install pandas matplotlib
 
-Быстрый старт (в ноутбуке или скрипте)
---------------------------------------
+Quick start (notebook or script)
+--------------------------------
 >>> import pandas as pd
 >>> from quick_view import QuickView
 >>> df = pd.read_csv("data/heart_train.csv")
 >>> qv = QuickView(df, target="Heart Attack Risk (Binary)")
->>> qv.report()        # выведет текстовые отчёты + нарисует hist и boxplot'ы
-# или по частям:
+>>> qv.report()        # prints text reports and draws hist/boxplots
+# or step by step:
 >>> qv.quick_overview()
 >>> qv.quick_details()
 >>> qv.quick_plots(bins=40)
 >>> qv.quick_boxplots()
 
-Примечания
-----------
-- Все печатающие методы выводят информацию в stdout (подходят для ячеек Jupyter).
-- Методы рисуют графики с помощью matplotlib; в Jupyter они появятся прямо под ячейкой.
+Notes
+-----
+- All printing methods output to stdout (works for Jupyter cells).
+- Plots are drawn with matplotlib; in Jupyter they appear below the cell.
 """
-
 from __future__ import annotations
 
 from typing import Optional, Sequence
@@ -46,72 +45,72 @@ import matplotlib.pyplot as plt
 
 class QuickView:
     """
-    Быстрый «ручной EDA»-обзор датафрейма.
+    Fast "manual EDA" overview of a DataFrame.
 
-    Что делает:
-      1) quick_overview()  — печатает общий обзор: head, размер, dtypes, пропуски, дубликаты, баланс таргета.
-      2) quick_details()   — печатает describe, min/max, частоты категориальных/низко-кардинальных, корреляции с таргетом.
-      3) quick_plots()     — рисует гистограммы для всех числовых признаков.
-      4) quick_boxplots()  — рисует boxplot'ы числовых признаков по классам таргета.
-      5) report()          — запускает всё по очереди.
+    What it does:
+      1) quick_overview()  — prints general overview: head, shape, dtypes, missing, duplicates, target balance.
+      2) quick_details()   — prints describe, min/max, value frequencies for categorical/low-cardinality features, correlations with target.
+      3) quick_plots()     — draws histograms for all numeric features.
+      4) quick_boxplots()  — draws boxplots of numeric features grouped by target classes.
+      5) report()          — runs all of the above in sequence.
 
-    Параметры __init__:
-      df          : pandas.DataFrame, исходные данные.
-      target      : имя таргета (может быть None; нужен для баланса/корреляций/boxplot).
-      max_unique  : порог кардинальности, ниже которого признак считаем «категориальным» для частот.
+    __init__ parameters:
+      df         : pandas.DataFrame, source data.
+      target     : name of target (can be None; used for balance/correlations/boxplot).
+      max_unique : cardinality threshold below which a feature is treated as "categorical" for frequencies.
     """
 
     def __init__(self, df: pd.DataFrame, target: Optional[str] = None, max_unique: int = 10) -> None:
-        # Сохраняем параметры. Исходный DataFrame не модифицируется.
+        # Store parameters. Original DataFrame is not modified.
         self.df = df
         self.target = target
         self.max_unique = int(max_unique)
 
-    # ============================ ТЕКСТОВЫЕ ОТЧЁТЫ ============================
+    # ============================ TEXT REPORTS ============================
 
     def quick_overview(self) -> None:
         """
-        Общий обзор набора:
-          • первые строки (head) в транспонированном виде (заголовки в одном столбце),
-          • размер датафрейма,
-          • типы данных,
-          • число пропусков по столбцам,
-          • число дубликатов (и доля),
-          • баланс таргета (если target указан и присутствует в df).
+        General dataset overview:
+          • first rows (head) transposed (headers in one column),
+          • DataFrame shape,
+          • data types,
+          • number of missing values per column,
+          • number of duplicates (and share),
+          • target balance (if target is specified and present in df).
         """
         df = self.df
         target = self.target
 
         print("=== QUICK OVERVIEW ===")
-        # head().T — заголовки столбцов становятся индексом; удобно «на глаз»
-        print("\nВнешний вид (head, T):")
+        # head().T — headers become index; handy for eyeballing
+        print("\nAppearance (head, T):")
         print(df.head().T)
 
-        print("\nРазмер (rows, cols):", df.shape)
+        print("\nShape (rows, cols):", df.shape)
 
-        print("\nТипы данных (dtypes):")
+        print("\nData types (dtypes):")
         print(df.dtypes)
 
-        print("\nПропуски (кол-во на столбец):")
+        print("\nMissing values (per column):")
         print(df.isnull().sum())
 
         dup = df.duplicated().sum()
         dup_pct = (dup / len(df) * 100.0) if len(df) else 0.0
-        print(f"\nДубликатов: {dup} ({dup_pct:.2f}%)")
+        print(f"\nDuplicates: {dup} ({dup_pct:.2f}%)")
 
         if target and target in df.columns:
-            print("\nБаланс таргета (доля классов):")
+            print("\nTarget balance (class share):")
             print(df[target].value_counts(normalize=True))
 
     def quick_details(self) -> None:
         """
-        Детализация набора:
-          • describe() по числовым,
-          • min/max по числовым,
-          • частоты значений для категориальных и «низко-кардинальных» столбцов (<= max_unique),
-          • корреляции числовых признаков с таргетом (если таргет указан и присутствует в df).
+        Dataset details:
+          • describe() for numeric,
+          • min/max for numeric,
+          • value frequencies for categorical and "low-cardinality" columns (<= max_unique),
+          • correlations of numeric features with target (if target is specified and present in df).
 
-        Примечание: корреляция считается только для числовых столбцов (numeric_only=True).
+        Note: correlation is calculated only for numeric columns (numeric_only=True).
         """
         df = self.df
         target = self.target
@@ -119,58 +118,58 @@ class QuickView:
 
         print("\n=== QUICK DETAILS ===")
 
-        # --- базовая статистика по числовым
+        # --- basic stats for numeric
         num_cols = df.select_dtypes(include="number")
-        desc = num_cols.describe() # только числовые
+        desc = num_cols.describe()  # numeric only
         if not desc.empty:
-            print("\n--- Статистика числовых признаков (describe) ---")
+            print("\n--- Statistics of numeric features (describe) ---")
             print(desc)
 
-            # Вывод min/max, если эти строки присутствуют в describe
+            # Output min/max if present
             min_max_rows = [ix for ix in ("min", "max") if ix in desc.index]
             if min_max_rows:
-                print("\n--- Min/Max по числовым ---")
+                print("\n--- Min/Max of numeric ---")
                 print(desc.loc[min_max_rows])
         else:
-            print("\nНет числовых столбцов для describe().")
+            print("\nNo numeric columns for describe().")
 
-        # --- частоты по категориальным и низко-кардинальным столбцам
-        print("\n--- Частоты категориальных / низко-кардинальных признаков ---")
+        # --- frequencies for categorical and low-cardinality columns
+        print("\n--- Frequencies of categorical / low-cardinality features ---")
         any_freq = False
         for col in df.columns:
-            # считаем «категориальным» если тип object или уникальных мало
+            # treat as categorical if type object or few unique values
             if df[col].dtype == "object" or df[col].nunique(dropna=False) <= max_unique:
                 any_freq = True
-                print(f"\nЧастоты в '{col}':")
+                print(f"\nFrequencies in '{col}':")
                 print(df[col].value_counts(dropna=False))
         if not any_freq:
-            print("(Подходящих столбцов не найдено)")
+            print("(No suitable columns found)")
 
-        # --- корреляции с таргетом
+        # --- correlations with target
         if target and target in df.columns:
             num_corr = df.corr(numeric_only=True)
             if target in num_corr.columns:
-                print("\n--- Корреляции числовых признаков с таргетом ---")
+                print("\n--- Correlations of numeric features with target ---")
                 print(num_corr[target].sort_values(ascending=False))
             else:
-                print("\n(Таргет не числовой — корреляции не посчитаны.)")
+                print("\n(Target is non-numeric — correlations not computed.)")
 
-    # ============================ ГРАФИКИ ============================
+    # ============================ PLOTS ============================
 
     def quick_plots(self, *, bins: int = 50, ncols: int = 3) -> None:
         """
-        Гистограммы распределений для всех числовых столбцов.
+        Histograms for all numeric columns.
 
-        Параметры:
-          bins  : число бинов гистограммы,
-          ncols : число колонок в сетке субплотов.
+        Parameters:
+          bins  : number of histogram bins,
+          ncols : number of columns in the subplot grid.
 
-        Вызывает plt.tight_layout() и plt.show().
+        Calls plt.tight_layout() and plt.show().
         """
         num_cols = self.df.select_dtypes(include="number").columns
         n = len(num_cols)
         if n == 0:
-            print("\nНет числовых столбцов для гистограмм.")
+            print("\nNo numeric columns for histograms.")
             return
 
         ncols = max(1, int(ncols))
@@ -185,10 +184,10 @@ class QuickView:
             grid=False
         )
 
-        # Выравниваем подписи и заголовки, чтобы не наслаивались
-        # axes может быть ndarray либо список списков — нормализуем через ravel()
+        # Align labels and titles to avoid overlaps
+        # axes may be ndarray or list of lists — normalize via ravel()
         for ax in axes.ravel():
-            if ax is None:  # если сетка больше числа графиков
+            if ax is None:  # if grid larger than number of plots
                 continue
             ax.tick_params(axis="x", labelrotation=30, labelsize=8)
             ax.tick_params(axis="y", labelsize=8)
@@ -199,28 +198,28 @@ class QuickView:
 
     def quick_boxplots(self, cols: Optional[Sequence[str]] = None, *, ncols: int = 3) -> None:
         """
-        Boxplot'ы по числовым признакам, сгруппированные по значениям таргета.
+        Boxplots of numeric features grouped by target values.
 
-        Параметры:
-          cols  : список столбцов (если None — все числовые, кроме таргета, и без служебных ID),
-          ncols : число колонок в сетке субплотов.
+        Parameters:
+          cols  : list of columns (if None — all numeric except target and ID-like columns),
+          ncols : number of columns in subplot grid.
 
-        Требуется валидный target, присутствующий в df. Если target отсутствует — метод сообщает и возвращается.
+        Requires a valid target present in df. If target is missing — method reports and returns.
         """
         y = self.target
         if not y or y not in self.df.columns:
-            print("\nquick_boxplots: укажи корректный target (self.target) и убедись, что он есть в df.")
+            print("\nquick_boxplots: specify a valid target (self.target) and ensure it exists in df.")
             return
 
-        # Убираем возможные служебные столбцы с идентификаторами, если есть
+        # Drop possible service ID columns
         base = self.df.drop(columns=["id", "Unnamed: 0", "Unnamed:0"], errors="ignore")
 
-        # Список колонок: по умолчанию все числовые, кроме таргета
+        # Column list: by default all numeric except target
         if cols is None:
             cols = [c for c in base.select_dtypes(include="number").columns if c != y]
 
         if len(cols) == 0:
-            print("\nНет подходящих числовых столбцов для boxplot.")
+            print("\nNo suitable numeric columns for boxplot.")
             return
 
         ncols = max(1, int(ncols))
@@ -236,28 +235,28 @@ class QuickView:
                 ax.set_xlabel(y)
             except Exception as e:
                 ax.set_visible(False)
-                print(f"[WARN] Не удалось построить boxplot для '{c}': {e}")
+                print(f"[WARN] Could not build boxplot for '{c}': {e}")
 
-        # Скрываем «лишние» оси, если сетка больше количества графиков
+        # Hide extra axes if grid is larger than number of plots
         for ax in axes.ravel()[len(cols):]:
             ax.set_visible(False)
 
-        # убираем общий заголовок, который pandas.boxplot добавляет автоматически
+        # remove common title added by pandas.boxplot
         plt.suptitle("")
         fig.tight_layout()
         plt.show()
 
-    # ============================ ОРКЕСТРАТОР ============================
+    # ============================ ORCHESTRATOR ============================
 
     def report(self) -> None:
         """
-        Полный отчёт: последовательно вызывает:
+        Full report: sequentially calls:
           1) quick_overview
           2) quick_details
           3) quick_plots
           4) quick_boxplots
 
-        Если target не указан, шаги 1–3 выполнятся, boxplot пропустится.
+        If target is not specified, steps 1–3 run and boxplot is skipped.
         """
         self.quick_overview()
         self.quick_details()
@@ -265,11 +264,11 @@ class QuickView:
         self.quick_boxplots()
 
 
-# Если запустить этот файл как скрипт, покажем краткую справку по использованию:
+# If run as a script, show a brief usage guide:
 if __name__ == "__main__":
     print(
-        "QuickView — модуль-утилита для быстрого EDA.\n"
-        "Использование (в Python/Jupyter):\n"
+        "QuickView — utility module for quick EDA.\n"
+        "Usage (in Python/Jupyter):\n"
         "    from quick_view import QuickView\n"
         "    import pandas as pd\n"
         "    df = pd.read_csv('data.csv')\n"

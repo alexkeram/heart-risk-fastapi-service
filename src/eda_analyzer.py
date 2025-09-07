@@ -1,4 +1,4 @@
-# файл: src/eda_analyzer.py
+# file: src/eda_analyzer.py
 from __future__ import annotations
 
 from typing import Optional, List
@@ -8,30 +8,30 @@ import pandas as pd
 
 class EDAAnalyzer:
     """
-    Пайплайн для нормализации «сырых» данных перед обучением/инференсом.
+    Pipeline for normalizing raw data before training/inference.
 
-    Что делает:
-      1) Удаляет служебные колонки (`'Unnamed: 0'`, `'Unnamed:0'`, `'id'`).
-      2) Нормализует поле `Gender` в Int8 {male:1, female:0} (принимает строки/0/1).
-      3) Если присутствуют оба `BMI` и `Obesity` - оставляет только `BMI`.
-      4) Базовая расстановка «правильных» типов для некоторых полей:
-         - `Diet`: числовая категория (после принудительного числового преобразования);
-         - `Stress Level`: целочисленный тип;
-         - `Physical Activity Days Per Week`: целочисленный тип.
+    Steps performed:
+      1) Remove service columns (`'Unnamed: 0'`, `'Unnamed:0'`, `'id'`).
+      2) Normalize `Gender` to Int8 {male:1, female:0} (accepts strings/0/1).
+      3) If both `BMI` and `Obesity` are present, keep only `BMI`.
+      4) Set basic types for selected fields:
+         - `Diet`: numeric category (after coercing to numbers);
+         - `Stress Level`: integer type;
+         - `Physical Activity Days Per Week`: integer type.
       5) `missing_values()`:
-         - нормализует пропуски (в т.ч. «скрытые» маркеры),
-         - добавляет `block_missing`, если *весь блок* социально-медицинских полей пуст.
+         - normalizes missing values (including hidden markers),
+         - adds `block_missing` if the entire block of socio-medical fields is empty.
       6) `cast_dtypes()`:
-         - object в бинарный Int8 (если значения из {0/1/yes/no/true/false}), иначе в category;
-         - целочисленные/категориальные не трогаем;
-         - остальное в числовое (float).
+         - object to binary Int8 (if values are {0/1/yes/no/true/false}), otherwise to category;
+         - integer/categorical columns are left untouched;
+         - everything else to numeric (float).
       7) `impute_minimal()`:
-         - числовые (кроме таргета) медианой,
-         - `Stress Level` целочисленной медианой,
-         - `Diet` добавляем категорию `'Unknown'` и заполняем ею пропуски.
-      8) `report()` отчёт; `process()` — последовательный запуск шагов и возврат очищенного DataFrame.
+         - numeric columns (except target) with median,
+         - `Stress Level` with integer median,
+         - `Diet` adds category `'Unknown'` and fills missing with it.
+      8) `report()` gives a summary; `process()` runs the steps sequentially and returns the cleaned DataFrame.
 
-    Пример
+    Example
     -------
     >>> import pandas as pd
     >>> raw = pd.DataFrame({"Gender": ["male", "female", None], "BMI": [24.2, 31.1, None], "id": [1, 2, 3]})
@@ -40,7 +40,7 @@ class EDAAnalyzer:
     ['Gender', 'BMI']
     """
 
-    # колонки «блока» для детекции полностью пропущенных анкетных полей
+    # block columns to detect rows where the entire questionnaire block is missing
     _BLOCK_COLS: List[str] = [
         "Diabetes", "Family History", "Smoking", "Obesity", "Alcohol Consumption",
         "Previous Heart Problems", "Medication Use", "Stress Level",
@@ -51,11 +51,11 @@ class EDAAnalyzer:
         self.df: pd.DataFrame = df.copy()
         self.target_col: Optional[str] = target_col
 
-        # 0) удалить служебные
+        # 0) remove service columns
         drop_cols = [c for c in self.df.columns if c.lower() in ("unnamed: 0", "unnamed:0", "id")]
         self.df.drop(columns=drop_cols, errors="ignore", inplace=True)
 
-        # 1) нормализация пола: строки -> {male:1, female:0}, 1/0 тоже принимаются
+        # 1) gender normalization: strings -> {male:1, female:0}, 1/0 also accepted
         if "Gender" in self.df.columns:
             g = (
                 self.df["Gender"]
@@ -66,19 +66,19 @@ class EDAAnalyzer:
             )
             gender_map = {"male": 1, "female": 0, "1": 1, "0": 0}
             self.df["Gender"] = g.map(gender_map).fillna(g)
-            # после map могут остаться строки - приведём к Int8 там, где возможно
+            # after mapping strings may remain - convert to Int8 where possible
             self.df["Gender"] = pd.to_numeric(self.df["Gender"], errors="coerce").astype("Int8")
 
-        # защищённые колонки (не трогаем тип при cast_dtypes)
+        # protected columns (skip type casting)
         self._protect = {"Gender"}
 
-        # 2) Если есть BMI и Obesity - оставить только BMI
+        # 2) If both BMI and Obesity are present - keep only BMI
         if {"BMI", "Obesity"} <= set(self.df.columns):
             self.df.drop(columns=["Obesity"], inplace=True)
 
-        # 3) Базовые типы
+        # 3) Basic types
         if "Diet" in self.df.columns:
-            # нормализация строковых маркеров «неизвестно» в пропуски
+            # normalize string markers of "unknown" to missing
             self.df["Diet"] = (
                 self.df["Diet"]
                 .astype("string")
@@ -86,9 +86,9 @@ class EDAAnalyzer:
                 .str.lower()
                 .replace({"unknown": pd.NA, "n/a": pd.NA, "na": pd.NA, "none": pd.NA})
             )
-            # принудительно пытаемся сделать числом
+            # force numeric conversion
             self.df["Diet"] = pd.to_numeric(self.df["Diet"], errors="coerce")
-            # округляем и делаем целочисленным, затем - категориальным
+            # round to integer and convert to categorical
             self.df["Diet"] = self.df["Diet"].round().astype("Int16").astype("category")
 
         if "Stress Level" in self.df.columns:
@@ -99,48 +99,47 @@ class EDAAnalyzer:
                 pd.to_numeric(self.df["Physical Activity Days Per Week"], errors="coerce").round().astype("Int16")
             )
 
-    # ----------------------------- шаги пайплайна -----------------------------
+    # ----------------------------- pipeline steps -----------------------------
 
     def missing_values(self) -> None:
         """
-        Нормализует пропуски и помечает строки с полным отсутствием значений в «блоке» полей.
-        Также пытается заменить «скрытые» маркеры пропусков (одно и то же значение во внегрупповом поле,
-        встречающееся ровно столько же раз, сколько NaN в каждом поле блока) на NaN
-        *только если эти вхождения строго совпадают со строками, где весь блок пуст*.
+        Normalize missing values and mark rows with all block fields absent.
+        Also attempts to replace "hidden" missing markers (same value in an out-of-block column
+        appearing exactly as often as NaN in each block column) with NaN
+        *only if those occurrences coincide with rows where the entire block is empty*.
         """
-        # пустые строки в NaN
+        # empty strings to NaN
         self.df.replace(r"^\s*$", pd.NA, regex=True, inplace=True)
 
         present = [c for c in self._BLOCK_COLS if c in self.df.columns]
         if not present:
             return
 
-        # частота NaN по колонкам блока
+        # NaN frequency per block column
         blk_na = self.df[present].isna().sum()
         if (blk_na.nunique() == 1) and (blk_na.iloc[0] > 0):
             n = int(blk_na.iloc[0])
-            # проверяем внегрупповые колонки на «особое» значение с той же кратностью
+            # check out-of-block columns for a special value with the same frequency
             for c in (x for x in self.df.columns if x not in present):
                 vc = self.df[c].value_counts(dropna=False)
                 for val, cnt in vc.items():
                     if pd.isna(val) or cnt != n:
                         continue
                     mask_val = self.df[c] == val
-                    # заменяем на NaN только там, где весь блок пуст
+                    # replace with NaN only where the entire block is empty
                     if (self.df.loc[mask_val, present].isna().all(axis=1)).all():
                         self.df.loc[mask_val, c] = pd.NA
-
-        # флаг «весь блок пропущен»
+        # flag "entire block missing"
         block_mask = self.df[present].isna().all(axis=1)
         if block_mask.any():
             self.df["block_missing"] = block_mask.astype("Int8")
 
     def cast_dtypes(self) -> None:
         """
-        Приведение типов:
-          - object в бинарный Int8 (если значения укладываются в {0,1,yes/no,true/false}) иначе в category;
-          - целочисленные/категориальные не трогаем;
-          - остальное в числовое (через `to_numeric`).
+        Type casting:
+          - object to binary Int8 (if values are within {0,1,yes/no,true/false}) else to category;
+          - integer/categorical columns are untouched;
+          - everything else to numeric via `to_numeric`.
         """
         for c in self.df.columns:
             if c == self.target_col or c in self._protect:
@@ -148,7 +147,7 @@ class EDAAnalyzer:
 
             s = self.df[c]
 
-            # object: попытка бинаризации, иначе - category
+            # object: attempt binary conversion, otherwise category
             if pd.api.types.is_object_dtype(s):
                 u = s.astype("string").str.strip().str.lower()
                 mapped = u.replace({"true": "1", "false": "0", "yes": "1", "no": "0"})
@@ -159,21 +158,21 @@ class EDAAnalyzer:
                     self.df[c] = u.astype("category")
                 continue
 
-            # если это уже int / category - не трогаем
+            # if already int / category - leave as is
             if s.dtype.kind in "iu" or pd.api.types.is_categorical_dtype(s.dtype):
                 continue
 
-            # остальное приводим к числу (float/IntNA)
+            # convert the rest to numbers (float/IntNA)
             self.df[c] = pd.to_numeric(s, errors="coerce")
 
     def impute_minimal(self) -> None:
         """
-        Минимальные заполнения пропусков:
-          - все числовые (кроме таргета) - медианой;
-          - `Stress Level` - целочисленной медианой (`Int16`);
-          - `Diet` - добавляем категорию `'Unknown'` и заполняем ею.
+        Minimal missing value imputations:
+          - all numeric (except target) with median;
+          - `Stress Level` with integer median (`Int16`);
+          - `Diet` add category `'Unknown'` and fill with it.
         """
-        # числовые - медианой; для Int типов pandas сохранит целочисленный dtype
+        # numeric columns: median; pandas keeps integer dtype for Int types
         num_cols = [
             c for c in self.df.columns
             if (c != self.target_col) and pd.api.types.is_numeric_dtype(self.df[c])
@@ -188,39 +187,38 @@ class EDAAnalyzer:
             self.df["Stress Level"] = self.df["Stress Level"].fillna(med).astype("Int16")
 
         if "Diet" in self.df.columns:
-            # на этом этапе Diet - категориальная; добавляем категорию Unknown и заполняем ею
+            # at this stage Diet is categorical; add category Unknown and fill with it
             if self.df["Diet"].isna().any():
                 self.df["Diet"] = self.df["Diet"].cat.add_categories(["Unknown"]).fillna("Unknown")
 
-    # ----------------------------- отчёт и запуск -----------------------------
+    # ----------------------------- report and run -----------------------------
 
     def report(self) -> None:
         """
-        Печатает краткий отчёт:
-          - размер,
-          - баланс таргета (если есть),
-          - *выполняет* missing_values - cast_dtypes - impute_minimal,
-          - список колонок и их типы,
-          - корреляции числовых с таргетом (если таргет есть).
+        Print a short report:
+          - shape,
+          - target balance (if present),
+          - executes missing_values - cast_dtypes - impute_minimal,
+          - list of columns and their dtypes,
+          - correlations of numeric features with target (if target present).
         """
-        print(f"Размер: {self.df.shape}")
+        print(f"Shape: {self.df.shape}")
         if (self.target_col is not None) and (self.target_col in self.df.columns):
-            print("Баланс таргета:\n", self.df[self.target_col].value_counts(normalize=True))
+            print("Target balance:\n", self.df[self.target_col].value_counts(normalize=True))
 
         self.missing_values()
         self.cast_dtypes()
         self.impute_minimal()
 
-        print("Колонки:", list(self.df.columns))
+        print("Columns:", list(self.df.columns))
         print("Dtypes:\n", self.df.dtypes)
         if (self.target_col is not None) and (self.target_col in self.df.columns):
-            print("\nКорр с таргетом (числовые):")
+            print("\nCorrelation with target (numeric):")
             print(self.df.corr(numeric_only=True)[self.target_col].sort_values(ascending=False))
 
     def process(self) -> pd.DataFrame:
         """
-        Последовательно запускает:
-        `missing_values()` - `cast_dtypes()` - `impute_minimal()` и возвращает очищенный DataFrame.
+        Sequentially runs `missing_values()` - `cast_dtypes()` - `impute_minimal()` and returns the cleaned DataFrame.
         """
         self.missing_values()
         self.cast_dtypes()

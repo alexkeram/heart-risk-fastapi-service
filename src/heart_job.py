@@ -1,4 +1,4 @@
-# файл: src/heart_job.py
+# file: src/heart_job.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,17 +8,17 @@ import json
 import joblib
 import pandas as pd
 
-# IPython может отсутствовать в некоторых окружениях
+# IPython may be absent in some environments
 try:
     from IPython.display import display, Markdown  # type: ignore
     _HAVE_IPY = True
 except Exception:  # pragma: no cover
     _HAVE_IPY = False
     def display(*_args, **_kwargs):  # noqa: D401
-        """no-op, если нет IPython."""
+        """No-op if IPython is unavailable."""
         pass
     def Markdown(_text: str) -> str:  # noqa: D401
-        """Прокси, если нет IPython."""
+        """Proxy when IPython is unavailable."""
         return _text
 
 from eda_analyzer import EDAAnalyzer
@@ -27,42 +27,42 @@ from heart_runner import HeartRiskRunner, RunCfg
 
 class HeartRiskJob:
     """
-    Верхнеуровневый оркестратор эксперимента.
+    High-level experiment orchestrator.
 
-    Отвечает за:
-      1) Предобработку данных (через `EDAAnalyzer`).
-      2) Перебор/оценку моделей с кросс-валидацией и выбор лучшей (через `HeartRiskRunner`).
-      3) Формирование отчётов (таблица всех комбинаций и сводка по лучшей).
-      4) Сохранение артефактов лучшей модели в `<корень проекта>/artifacts`.
+    Responsible for:
+      1) Data preprocessing (via `EDAAnalyzer`).
+      2) Iterating/evaluating models with cross-validation and selecting the best one (via `HeartRiskRunner`).
+      3) Generating reports (table of all combinations and summary of the best).
+      4) Saving the best model artifacts to `<project_root>/artifacts`.
 
-    Папка `artifacts/`
+    `artifacts/` folder
     -------------------
-    В неё пишутся:
-      - `best_meta.json` — метаинформация (тип модели, признаки, cats, threshold, **имя** файла модели),
-      - `best_model.cbm` или `best_model.joblib` - сам файл модели.
-    В `meta["model_path"]` сохраняется только **имя** файла, без абсолютного пути.
+    Contains:
+      - `best_meta.json` — metadata (model type, features, cats, threshold, **file name** of the model),
+      - `best_model.cbm` or `best_model.joblib` — the model file itself.
+    `meta["model_path"]` stores only the **file name** without an absolute path.
 
-    Атрибуты экземпляра
+    Instance attributes
     -------------------
     cfg : RunCfg
-        Конфигурация прогона.
+        Run configuration.
     artifacts_dir : Path
-        Абсолютный путь к папке артефактов (по умолчанию `<root>/artifacts`).
+        Absolute path to the artifacts folder (default `<root>/artifacts`).
     _runner : Optional[HeartRiskRunner]
-        Внутренний раннер (после `run()` доступен).
+        Internal runner (available after `run()`).
     _out : Optional[dict]
-        Сырые результаты `run_all()` (metrics, ci, best, artifacts).
+        Raw results from `run_all()` (metrics, CI, best, artifacts).
     best_artifacts : Optional[dict]
-        Артефакты лучшей модели (модель, ключ, признаки, cats, threshold, shap_top).
+        Artifacts of the best model (model, key, features, cats, threshold, shap_top).
     report_all : Optional[pd.DataFrame]
-        Таблица метрик по всем комбинациям.
+        Metrics table for all combinations.
     report_best : Optional[pd.DataFrame]
-        Сводка по лучшей модели.
+        Summary for the best model.
     trained_list : Optional[List[str]]
-        Список обученных комбинаций в формате `"Model | Scenario"`.
+        List of trained combinations in the `"Model | Scenario"` format.
 
-    Пример
-    ------
+    Example
+    -------
     .. code-block:: python
 
         from pathlib import Path
@@ -83,7 +83,7 @@ class HeartRiskJob:
     ) -> None:
         self.cfg: RunCfg = cfg or RunCfg()
 
-        # корень проекта = папка выше src/
+        # project root = folder above src/
         project_root = Path(__file__).resolve().parents[2]
         default_artifacts = project_root / "artifacts"
 
@@ -95,18 +95,18 @@ class HeartRiskJob:
 
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-        # служебные поля
+        # internal fields
         self._runner: Optional[HeartRiskRunner] = None
         self._out: Optional[Dict] = None
         self.best_artifacts: Optional[Dict] = None
 
-        # отчёты
+        # reports
         self.report_all: Optional[pd.DataFrame] = None
         self.report_best: Optional[pd.DataFrame] = None
         self.trained_list: Optional[List[str]] = None
 
     # --------------------------------------------------------------------- #
-    #                            Основные методы                            #
+    #                            Main methods                              #
     # --------------------------------------------------------------------- #
 
     def run(
@@ -115,38 +115,38 @@ class HeartRiskJob:
         target_col: str = "Heart Attack Risk (Binary)",
     ) -> Dict:
         """
-        Полный прогон без сохранения:
-        - предобработка (`EDAAnalyzer`),
-        - перебор моделей (`HeartRiskRunner.run_all`),
-        - выбор лучшей,
-        - подготовка отчётов.
+        Full run without saving:
+        - preprocessing (`EDAAnalyzer`),
+        - model iteration (`HeartRiskRunner.run_all`),
+        - selecting the best,
+        - preparing reports.
 
         Returns
         -------
         dict
-            Сырые результаты из `HeartRiskRunner.run_all`.
+            Raw results from `HeartRiskRunner.run_all`.
         """
         train_df = EDAAnalyzer(train_df_raw, target_col=target_col).process()
         self._runner = HeartRiskRunner(self.cfg)
         self._out = self._runner.run_all(train_df)
         self.best_artifacts = self._out["artifacts"]
 
-        # отчёты
+        # reports
         self._build_report_frames(self._out)
         self.show_report()
         return self._out
 
     def save(self) -> Dict:
         """
-        Сохраняет лучшую модель и метаданные в `<корень проекта>/artifacts`.
+        Save the best model and metadata to `<project_root>/artifacts`.
 
         Returns
         -------
         dict
-            Сохранённая мета (с именем файла модели).
+            Saved metadata (with the model file name).
         """
         if not self.best_artifacts:
-            raise RuntimeError("Нечего сохранять: вызовите run(...) перед save().")
+            raise RuntimeError("Nothing to save: call run(...) before save().")
 
         ba = self.best_artifacts
         meta = {
@@ -156,7 +156,7 @@ class HeartRiskJob:
             "threshold": float(ba["threshold"]),
         }
 
-        # сохраняем файл модели
+        # save model file
         if ba["model_key"] == "cat":
             model_path = self.artifacts_dir / "best_model.cbm"
             ba["model"].save_model(str(model_path))
@@ -164,10 +164,10 @@ class HeartRiskJob:
             model_path = self.artifacts_dir / "best_model.joblib"
             joblib.dump(ba["model"], model_path)
 
-        # в meta — только имя файла модели
+        # meta contains only the model file name
         meta["model_path"] = model_path.name
 
-        # сохраняем метаданные рядом
+        # save metadata alongside
         meta_path = self.artifacts_dir / "best_meta.json"
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
@@ -181,26 +181,26 @@ class HeartRiskJob:
         target_col: str = "Heart Attack Risk (Binary)",
     ) -> Dict:
         """
-        Запускает полный прогон (`run`) и сразу сохраняет модель (`save`).
+        Run the full pipeline (`run`) and immediately save the model (`save`).
 
         Returns
         -------
         dict
-            Сохранённая мета.
+            Saved metadata.
         """
         self.run(train_df_raw, target_col=target_col)
         return self.save()
 
     # --------------------------------------------------------------------- #
-    #                          Построение отчётов                            #
+    #                          Report building                              #
     # --------------------------------------------------------------------- #
 
     def _build_report_frames(self, out: Dict) -> None:
         """
-        Формирует:
-          - `report_all`: метрики всех комбинаций,
-          - `report_best`: сводку по лучшей,
-          - `trained_list`: список комбинаций `"Model | Scenario"`.
+        Builds:
+          - `report_all`: metrics of all combinations,
+          - `report_best`: summary for the best,
+          - `trained_list`: list of combinations `"Model | Scenario"`.
         """
         rows: List[Dict] = []
         for r in out["results"]:
@@ -267,22 +267,22 @@ class HeartRiskJob:
         self.trained_list = [f"{m} | {s}" for m, s in combos.to_records(index=False)]
 
     def show_report(self) -> None:
-        """Отображает отчёт в Jupyter (если доступен IPython). Вне Jupyter тихо пропускается."""
+        """Display the report in Jupyter (if IPython is available). Silently skip otherwise."""
         if self.report_all is None or self.report_best is None:
             return
         if _HAVE_IPY:
-            display(Markdown("### РЕЗУЛЬТАТЫ (CV, OoF)"))
+            display(Markdown("### RESULTS (CV, OoF)"))
             display(self.report_all)
-            display(Markdown("### Лучшая модель"))
+            display(Markdown("### Best model"))
             display(self.report_best)
 
     # --------------------------------------------------------------------- #
-    #                               Служебные                               #
+    #                               Helpers                                 #
     # --------------------------------------------------------------------- #
 
     def _echo_saved_meta(self, meta: Dict) -> None:
-        """Красиво показывает сохранённую мету (через IPython) или печатает JSON строкой."""
-        text = "**Сохранены артефакты**:\n\n```json\n" + json.dumps(meta, ensure_ascii=False, indent=2) + "\n```"
+        """Nicely show saved metadata (via IPython) or print JSON as plain text."""
+        text = "**Artifacts saved**:\n\n```json\n" + json.dumps(meta, ensure_ascii=False, indent=2) + "\n```"
         if _HAVE_IPY:
             display(Markdown(text))
         else:  # pragma: no cover

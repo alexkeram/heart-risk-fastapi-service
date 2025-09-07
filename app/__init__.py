@@ -1,4 +1,4 @@
-# Делает объект FastAPI доступным как `from app import app`
+# Makes the FastAPI instance available via `from app import app`
 from .main import app
 
 __all__ = ["app"]

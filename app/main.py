@@ -1,53 +1,57 @@
 # app/main.py
 """
-Heart Risk Inference — FastAPI сервис
-=====================================
+Heart Risk Inference — FastAPI service
+======================================
 
-Этот модуль — точка входа веб-приложения. Он связывает веб-интерфейс (HTML + загрузка CSV)
-и библиотеку инференса (`src/inference_utils.py`), которая читает артефакты модели из
-папки `artifacts/` и делает предсказания.
+This module is the entry point of the web application. It connects the web
+interface (HTML + CSV upload) and the inference library
+(`src/inference_utils.py`), which reads model artifacts from the `artifacts/`
+folder and makes predictions.
 
-КАК ЭТО РАБОТАЕТ
---------------------------
-1. При старте приложения (lifespan) мы один раз загружаем инференс-обёртку:
+HOW IT WORKS
+------------
+1. On application startup (lifespan) we load the inference wrapper once:
    `HeartRiskInference.from_dir(ARTIFACTS_DIR)`.
-   ▸ Ожидается, что в `artifacts/` лежат `best_meta.json` и файл модели
-     (`best_model.cbm` или `best_model.joblib`). Путь к артефактам можно переопределить
-     переменной окружения `ARTIFACTS_DIR`, иначе берём `<корень проекта>/artifacts`.
+   ▸ It expects `best_meta.json` and the model file (`best_model.cbm` or
+     `best_model.joblib`) in `artifacts/`. The path can be overridden with the
+     `ARTIFACTS_DIR` environment variable; otherwise `<project root>/artifacts`
+     is used.
 
-2. Веб-страница (`GET /`) отдает форму для загрузки CSV.
-   На `POST /` принимаем CSV, считаем предсказания и показываем список в браузере,
-   а также сохраняем последний результат в `app.state.last_result` для кнопки «скачать».
+2. The web page (`GET /`) serves a form for uploading CSV.
+   `POST /` accepts CSV, computes predictions, shows the list in the browser and
+   saves the last result in `app.state.last_result` for the download button.
 
 3. JSON API:
-   • `POST /api/predict_path` — принимает JSON `{ "path": "<путь_к_csv>" }` и возвращает
-     JSON со сводкой и списком предсказаний.
-   • `POST /api/predict_file` — принимает файл как multipart/form-data (как на веб-странице)
-     и возвращает тот же JSON.
-   • `GET/POST /download` — отдает CSV с последними предсказаниями (если до этого уже
-     был выполнен расчёт через веб или API).
+   • `POST /api/predict_path` — accepts JSON `{ "path": "<path_to_csv>" }` and
+     returns JSON with a summary and list of predictions.
+   • `POST /api/predict_file` — accepts a file via multipart/form-data (as on
+     the web page) and returns the same JSON.
+   • `GET/POST /download` — returns a CSV with the latest predictions (if a
+     computation has already been done via web or API).
 
-4. Статика и шаблоны:
-   ▸ HTML-шаблон в `app/templates/index.html`
-   ▸ Стили в `app/static/`
-   ▸ Переменная `APP_VERSION` используется для cache-busting статики.
+4. Static files and templates:
+   ▸ HTML template in `app/templates/index.html`
+   ▸ Styles in `app/static/`
+   ▸ The `APP_VERSION` variable is used for cache busting.
 
-ТОЧКИ РАСШИРЕНИЯ
+EXTENSION POINTS
 ----------------
-• Изменить/добавить логику препроцессинга — см. `src/eda_analyzer.py`.
-• Изменить логику обучения/сохранения артефактов — см. `src/heart_job.py`, `src/heart_runner.py`.
-• Логику инференса/загрузки артефактов — см. `src/inference_utils.py` (класс `HeartRiskInference`).
+• Modify/add preprocessing logic — see `src/eda_analyzer.py`.
+• Change training/artifact saving logic — see `src/heart_job.py`,
+  `src/heart_runner.py`.
+• Inference/artifact loading logic — see `src/inference_utils.py`
+  (`HeartRiskInference` class).
 
-ПРИМЕРЫ ЗАПРОСОВ
+EXAMPLE REQUESTS
 ----------------
-• Здоровье сервиса:
+• Service health:
   GET http://127.0.0.1:8000/health
 
-• JSON по пути к CSV (PowerShell):
+• JSON via file path (PowerShell):
   Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/api/predict_path' `
     -ContentType 'application/json' -Body '{"path":"data/heart_test.csv"}' | ConvertTo-Json -Depth 5
 
-• JSON с файлом (PowerShell):
+• JSON with file (PowerShell):
   Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/api/predict_file' `
     -ContentType 'multipart/form-data' -InFile 'data/heart_test.csv' -OutFile 'resp.json'
 
@@ -69,50 +73,45 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-# ---- настройки путей ---------------------------------------------------------
-BASE_DIR = Path(__file__).resolve().parents[1]  # корень проекта
+# ---- path settings -----------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parents[1]  # project root
 SRC_DIR = BASE_DIR / "src"
 if str(SRC_DIR) not in sys.path:
-    # Делаем src/ импортируемым как модуль (EDAAnalyzer, HeartRiskInference и т.д.)
+    # Make src/ importable as a module (EDAAnalyzer, HeartRiskInference, etc.)
     sys.path.insert(0, str(SRC_DIR))
-
-# ---- импорт модулей из src/ --------------------------------------------------
+# ---- import modules from src/ ------------------------------------------------
 from inference_utils import HeartRiskInference  # noqa
-
-# ---- конфигурация ------------------------------------------------------------
-APP_VERSION = os.environ.get("APP_VERSION", os.urandom(4).hex())  # для cache-busting
+# ---- configuration -----------------------------------------------------------
+APP_VERSION = os.environ.get("APP_VERSION", os.urandom(4).hex())  # for cache busting
 ARTIFACTS_DIR = Path(os.environ.get("ARTIFACTS_DIR", BASE_DIR / "artifacts")).resolve()
-
-# ---- папки шаблонов/статик ---------------------------------------------------
+# ---- templates/static folders ------------------------------------------------
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-
-# ---- lifecycle: загружаем модель на старте -----------------------------------
+# ---- lifecycle: load model on startup ---------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Единожды при старте сервиса загружаем инференс-обёртку.
-    Если файлов артефактов нет — упадём на старте с понятной ошибкой.
+    Load the inference wrapper once when the service starts.
+    If artifact files are missing, fail on startup with a clear error.
     """
     app.state.inf = HeartRiskInference.from_dir(ARTIFACTS_DIR)
-    app.state.last_result = None  # сюда кладём последний вычисленный DataFrame (для /download)
+    app.state.last_result = None  # store last computed DataFrame (for /download)
     yield
-
-# ---- создаём приложение ------------------------------------------------------
+# ---- create app --------------------------------------------------------------
 app = FastAPI(title="Heart Risk Inference", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-# ====================== Pydantic-схемы для JSON ==============================
+# ====================== Pydantic schemas for JSON ============================
 
 class PredictionRow(BaseModel):
-    """Одна строка предсказаний (используется в JSON-ответе API)."""
+    """One prediction row (used in the API JSON response)."""
     patient_id: Union[int, str]
     proba: float
-    prediction: int  # 0 — низкий риск, 1 — высокий риск
+    prediction: int  # 0 — low risk, 1 — high risk
 
 class PredictionSummary(BaseModel):
-    """Сводка по батчу: размеры и доли классов."""
+    """Batch summary: counts and class ratios."""
     n_patients: int
     n_high: int
     n_low: int
@@ -121,27 +120,27 @@ class PredictionSummary(BaseModel):
 
 class PredictResponse(BaseModel):
     """
-    Полный JSON-ответ API:
-      • summary — агрегированная сводка,
-      • predictions — список по каждому пациенту.
+    Full API JSON response:
+      • summary — aggregated summary,
+      • predictions — list for each patient.
     """
     summary: PredictionSummary
     predictions: List[PredictionRow]
 
 class PredictPathIn(BaseModel):
-    """Вход для /api/predict_path — абсолютный или относительный путь к CSV."""
+    """Input for /api/predict_path — absolute or relative path to CSV."""
     path: str
 
-# ====================== Общая логика предсказаний ============================
+# ====================== Common prediction logic ==============================
 
 _ID_CANDIDATES = ["patient_id", "PatientID", "patientId", "Patient Id", "id", "ID", "Unnamed: 0", "Unnamed:0"]
 
 def _normalize_patient_id_value(v):
     """
-    Приводим идентификатор пациента к сериализуемому виду:
-    • целые/строки оставляем как есть,
-    • numpy-типы приводим,
-    • прочее — в строку.
+    Normalize patient identifier to a serializable form:
+    • keep integers/strings as is,
+    • cast numpy types,
+    • everything else to string.
     """
     try:
         import numpy as np
@@ -158,21 +157,21 @@ def _normalize_patient_id_value(v):
 
 def _make_payload_from_df(df: pd.DataFrame) -> PredictResponse:
     """
-    Общая функция инференса для веб-формы и JSON-эндпоинтов:
-      1) находим patient_id (или берём индекс),
-      2) считаем предсказания через app.state.inf.predict(df),
-      3) формируем DataFrame out (для /download),
-      4) считаем сводку,
-      5) собираем JSON-ответ (PredictResponse).
+    Common inference function for the web form and JSON endpoints:
+      1) find patient_id (or use index),
+      2) compute predictions via app.state.inf.predict(df),
+      3) build DataFrame out (for /download),
+      4) compute summary,
+      5) assemble JSON response (PredictResponse).
     """
-    # 1) patient_id из входного CSV
+    # 1) patient_id from the input CSV
     id_col = next((c for c in _ID_CANDIDATES if c in df.columns), None)
     patient_id = df[id_col] if id_col is not None else pd.Series(df.index, name="patient_id")
 
-    # 2) инференс: вернёт DataFrame с колонками proba, prediction
+    # 2) inference: returns DataFrame with columns proba, prediction
     pred_df = app.state.inf.predict(df)
 
-    # 3) итоговая таблица (для кнопки «скачать» и возможного аудита)
+    # 3) final table (for download button and possible audit)
     out = pd.DataFrame({
         "patient_id": patient_id.values,
         "proba": pred_df["proba"].values,
@@ -180,14 +179,14 @@ def _make_payload_from_df(df: pd.DataFrame) -> PredictResponse:
     })
     app.state.last_result = out
 
-    # 4) сводка
+    # 4) summary
     n_total = len(out)
     n_high = int((out["prediction"] == 1).sum())
     n_low = n_total - n_high
     p_high = round(100.0 * n_high / n_total, 1) if n_total else 0.0
     p_low = round(100.0 * n_low / n_total, 1) if n_total else 0.0
 
-    # 5) JSON-строки
+    # 5) JSON rows
     predictions = [
         PredictionRow(
             patient_id=_normalize_patient_id_value(out.loc[i, "patient_id"]),
@@ -204,30 +203,30 @@ def _make_payload_from_df(df: pd.DataFrame) -> PredictResponse:
         predictions=predictions
     )
 
-# ====================== Маршруты ============================================
+# ====================== Routes ==============================================
 
 @app.get("/health")
 async def health():
     """
-    Проверка сервиса.
-    Возвращает: {"status": "ok", "version": "<APP_VERSION>"}.
+    Service health check.
+    Returns: {"status": "ok", "version": "<APP_VERSION>"}.
     """
     return {"status": "ok", "version": APP_VERSION}
 
-# ---------- HTML (веб-страница) ---------------------------------------------
+# ---------- HTML (web page) --------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """
-    Возвращает HTML-страницу с формой загрузки CSV.
-    Шаблон: app/templates/index.html
+    Return HTML page with CSV upload form.
+    Template: app/templates/index.html
     """
     return templates.TemplateResponse("index.html", {"request": request, "summary": None, "version": APP_VERSION})
 
 @app.post("/", response_class=HTMLResponse)
 async def predict_page(request: Request, file: UploadFile = File(...)):
     """
-    Принимает CSV через веб-форму (multipart/form-data),
-    считает предсказания и отрисовывает результаты на той же странице.
+    Accept CSV via web form (multipart/form-data),
+    compute predictions and render results on the same page.
     """
     try:
         raw = await file.read()
@@ -235,7 +234,7 @@ async def predict_page(request: Request, file: UploadFile = File(...)):
 
         payload = _make_payload_from_df(df)
 
-        # Формируем элементы для списка на странице
+        # Prepare items for the list on the page
         rows = [
             {"idx": pr.patient_id, "pred": pr.prediction, "proba": pr.proba}
             for pr in payload.predictions
@@ -249,19 +248,19 @@ async def predict_page(request: Request, file: UploadFile = File(...)):
     except Exception as e:
         return templates.TemplateResponse(
             "index.html",
-            {"request": request, "error": f"Ошибка обработки файла: {e}", "summary": None, "version": APP_VERSION}
+            {"request": request, "error": f"File processing error: {e}", "summary": None, "version": APP_VERSION}
         )
 
-# ---------- JSON API: по пути к CSV -----------------------------------------
+# ---------- JSON API: by path to CSV ----------------------------------------
 @app.post("/api/predict_path", response_model=PredictResponse)
 async def api_predict_path(body: PredictPathIn):
     """
-    Считает предсказания по файлу на диске.
+    Predicts from a CSV file on disk.
 
     Request JSON:
-      { "path": "data/heart_test.csv" }  # путь абсолютный или от корня проекта
+      { "path": "data/heart_test.csv" }  # absolute or project-root-relative path
 
-    Response JSON (схема PredictResponse):
+    Response JSON (PredictResponse schema):
       {
         "summary": { ... },
         "predictions": [ { "patient_id": ..., "proba": ..., "prediction": ... }, ... ]
@@ -271,39 +270,39 @@ async def api_predict_path(body: PredictPathIn):
     if not csv_path.is_absolute():
         csv_path = (BASE_DIR / csv_path).resolve()
     if not csv_path.is_file() or csv_path.suffix.lower() != ".csv":
-        raise HTTPException(status_code=400, detail=f"CSV файл не найден: {csv_path}")
+        raise HTTPException(status_code=400, detail=f"CSV file not found: {csv_path}")
 
     try:
         df = pd.read_csv(csv_path)
         return _make_payload_from_df(df)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка обработки файла: {e}")
+        raise HTTPException(status_code=500, detail=f"File processing error: {e}")
 
-# ---------- JSON API: загрузка файла ----------------------------------------
+# ---------- JSON API: file upload -------------------------------------------
 @app.post("/api/predict_file", response_model=PredictResponse)
 async def api_predict_file(file: UploadFile = File(...)):
     """
-    Считает предсказания из переданного файла (multipart/form-data).
+    Predicts from an uploaded file (multipart/form-data).
 
-    Пример (Swagger / Postman):
-      form field "file": <ваш CSV>
+    Example (Swagger / Postman):
+      form field "file": <your CSV>
     """
     try:
         raw = await file.read()
         df = pd.read_csv(BytesIO(raw))
         return _make_payload_from_df(df)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка обработки файла: {e}")
+        raise HTTPException(status_code=500, detail=f"File processing error: {e}")
 
-# ---------- Скачивание последнего результата (CSV) ---------------------------
+# ---------- Download last result (CSV) --------------------------------------
 @app.api_route("/download", methods=["GET", "POST"])
 async def download():
     out_full = getattr(app.state, "last_result", None)
     if out_full is None or len(out_full) == 0:
-        return HTMLResponse("Нет результатов для скачивания. Сначала загрузите CSV.", status_code=404)
+        return HTMLResponse("No results to download. Upload a CSV first.", status_code=404)
 
-    # если во входе была колонка id — она сохранится в last_result как patient_id.
-    # Переименуем на лету в "id" и выберем только две колонки.
+    # if the input had an id column it is stored in last_result as patient_id.
+    # Rename on the fly to "id" and select only two columns.
     out = out_full.rename(columns={"patient_id": "id"})[["id", "prediction"]]
 
     bio = BytesIO()
@@ -314,10 +313,10 @@ async def download():
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="predictions.csv"'}
     )
-# ---- локальный dev-запуск как `python app/main.py` --------------------------
+# ---- local dev run as `python app/main.py` ----------------------------------
 def _choose_free_port(preferred: int = 8000, tries: int = 20) -> int:
     """
-    Ищем свободный порт, начиная с preferred. Нужен на случай, если 8000 уже занят.
+    Find a free port starting from preferred. Needed if 8000 is already taken.
     """
     for p in range(preferred, preferred + tries):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -331,6 +330,6 @@ def _choose_free_port(preferred: int = 8000, tries: int = 20) -> int:
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", _choose_free_port(8000)))
-    # включить авто-перезапуск в деве: set RELOAD=1
+    # enable auto-reload in dev: set RELOAD=1
     reload_flag = os.environ.get("RELOAD", "0") == "1"
     uvicorn.run("app.main:app", host="127.0.0.1", port=port, reload=reload_flag)

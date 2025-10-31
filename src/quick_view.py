@@ -10,27 +10,6 @@ Provides a rapid initial understanding of data:
   correlations with the target;
 - basic distribution plots (hist) and boxplots by target classes.
 
-Dependencies
-------------
-- pandas (source of DataFrame)
-- matplotlib (for plots)
-
-Installation (if needed):
-    pip install pandas matplotlib
-
-Quick start (notebook or script)
---------------------------------
->>> import pandas as pd
->>> from quick_view import QuickView
->>> df = pd.read_csv("data/heart_train.csv")
->>> qv = QuickView(df, target="Heart Attack Risk (Binary)")
->>> qv.report()        # prints text reports and draws hist/boxplots
-# or step by step:
->>> qv.quick_overview()
->>> qv.quick_details()
->>> qv.quick_plots(bins=40)
->>> qv.quick_boxplots()
-
 Notes
 -----
 - All printing methods output to stdout (works for Jupyter cells).

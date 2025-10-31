@@ -21,8 +21,8 @@ except Exception:  # pragma: no cover
         """Proxy when IPython is unavailable."""
         return _text
 
-from eda_analyzer import EDAAnalyzer
-from heart_runner import HeartRiskRunner, RunCfg
+from .eda_analyzer import EDAAnalyzer
+from .heart_runner import HeartRiskRunner, RunCfg
 
 
 class HeartRiskJob:
@@ -84,7 +84,7 @@ class HeartRiskJob:
         self.cfg: RunCfg = cfg or RunCfg()
 
         # project root = folder above src/
-        project_root = Path(__file__).resolve().parents[2]
+        project_root = Path(__file__).resolve().parents[1]
         default_artifacts = project_root / "artifacts"
 
         if artifacts_dir is None:

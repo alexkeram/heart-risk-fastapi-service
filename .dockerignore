@@ -1,0 +1,10 @@
+.venv
+__pycache__
+*.pyc
+.git
+.idea
+.run
+notebooks
+data
+submissions
+*.ipynb

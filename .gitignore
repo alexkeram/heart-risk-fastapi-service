@@ -12,15 +12,13 @@ __pycache__/
 .venv/
 .env
 
-# Data & Artifacts
-data/
+# Artifacts
 models/
 *.pkl
 *.joblib
 *.onnx
 *.h5
 
-# Разрешаем сохранять только маркеры структуры
 !data/.gitkeep
 !models/.gitkeep
 

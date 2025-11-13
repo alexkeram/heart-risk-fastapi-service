@@ -21,8 +21,8 @@ except Exception:  # pragma: no cover
         """Proxy when IPython is unavailable."""
         return _text
 
-from .eda_analyzer import EDAAnalyzer
-from .heart_runner import HeartRiskRunner, RunCfg
+from src.eda_analyzer import EDAAnalyzer
+from src.heart_runner import HeartRiskRunner, RunCfg
 
 
 class HeartRiskJob:

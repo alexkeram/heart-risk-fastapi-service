@@ -62,7 +62,7 @@ import joblib
 import pandas as pd
 from catboost import CatBoostClassifier, Pool
 
-from eda_analyzer import EDAAnalyzer
+from src.eda_analyzer import EDAAnalyzer
 
 
 class HeartRiskInference:

@@ -61,7 +61,6 @@ EXAMPLE REQUESTS
 import os
 from io import BytesIO
 from pathlib import Path
-import sys
 import socket
 from contextlib import asynccontextmanager
 from typing import List, Union
@@ -76,11 +75,8 @@ from fastapi.templating import Jinja2Templates
 # ---- path settings -----------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parents[1]  # project root
 SRC_DIR = BASE_DIR / "src"
-if str(SRC_DIR) not in sys.path:
-    # Make src/ importable as a module (EDAAnalyzer, HeartRiskInference, etc.)
-    sys.path.insert(0, str(SRC_DIR))
 # ---- import modules from src/ ------------------------------------------------
-from inference_utils import HeartRiskInference  # noqa
+from src.inference_utils import HeartRiskInference
 # ---- configuration -----------------------------------------------------------
 APP_VERSION = os.environ.get("APP_VERSION", os.urandom(4).hex())  # for cache busting
 ARTIFACTS_DIR = Path(os.environ.get("ARTIFACTS_DIR", BASE_DIR / "artifacts")).resolve()

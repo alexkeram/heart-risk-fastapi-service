@@ -64,6 +64,7 @@ from pathlib import Path
 import socket
 from contextlib import asynccontextmanager
 from typing import List, Union
+import uvicorn
 
 import pandas as pd
 from pydantic import BaseModel
@@ -324,7 +325,6 @@ def _choose_free_port(preferred: int = 8000, tries: int = 20) -> int:
     return preferred
 
 if __name__ == "__main__":
-    import uvicorn
     port = int(os.environ.get("PORT", _choose_free_port(8000)))
     # enable auto-reload in dev: set RELOAD=1
     reload_flag = os.environ.get("RELOAD", "0") == "1"

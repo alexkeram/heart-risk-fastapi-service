@@ -7,7 +7,7 @@ name = "heart-risk-classification"
 version = "0.1.0"
 description = "Heart risk classification FastAPI app"
 authors = [
-  { name="Alex Zhuravlev" }
+  { name="Aleksandr Zhuravlev" }
 ]
 dependencies = [
   "fastapi",

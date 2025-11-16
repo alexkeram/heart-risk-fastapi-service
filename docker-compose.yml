@@ -1,0 +1,13 @@
+services:
+  api:
+    # docker image from dockerhub
+    image: ${IMAGE}
+    # local build, uncomment if you want to create your image locally
+    # build: .
+    container_name: heart_api
+    ports:
+      - "${8000}:8000"
+    # model artifacts
+    volumes:
+      - ./artifacts:/app/artifacts
+    restart: unless-stopped

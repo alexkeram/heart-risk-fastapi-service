@@ -24,7 +24,7 @@ COPY artifacts artifacts
 COPY README.md README.md
 
 # 7. Port for the app
-EXPOSE 8000
+EXPOSE {PORT:-8000}
 
 # 8. Start command
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

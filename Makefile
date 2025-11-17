@@ -1,101 +1,111 @@
+# ==== Shell ====
+SHELL := bash
+-include .env
+export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env)
 # ==== Environment variables ====
-PORT ?= 8000
 APP ?= app.main:app
-IMAGE ?= heart-api
-PY := .venv/Scripts/python.exe
+PY := ./.venv/Scripts/python.exe
 DC := docker compose
+# 0 — do not start Docker automatically; 1 — start  Docker automatically and wait
+AUTO_START_DOCKER ?= 1
 
-.PHONY: help init install dev-install dev lint lint-fix test build run logs down open run-open restart clean
+# ==== Phony targets ====
+.PHONY: help init start stop ci pull run-image tag push open-docs prune \
+        install dev-install dev lint lint-fix test build run logs down open \
+        run-open restart clean doctor start-docker wait-docker docker-up
 
-# Goals
+# ==== Help ====
 help:
-	@echo "make init          - preparing: venv + deps + docker compose pull"
-	@echo "make start         - start a container and open a page"
+	@echo "make init          - bootstrap: venv + deps + docker compose pull"
+	@echo "make start         - up container(s) and open UI"
 	@echo "make stop          - docker compose down"
 	@echo "make ci            - local CI (ruff + pytest)"
-	@echo "make pull          - docker pull $(IMAGE)"
-	@echo "make run-image     - docker run -d -p $(PORT):8000 $(IMAGE)"
-	@echo "make open-docs     - open http://localhost:$(PORT)/docs"
-	@echo "make prune         - docker system prune (cleaning)"
-	@echo "make install       - install runtime-dependencies from requirements.txt"
-	@echo "make dev-install   - install dev-dependencies (pytest, ruff)"
-	@echo "make dev           - local start uvicorn --reload"
-	@echo "make lint          - check code with ruff"
-	@echo "make lint-fix      - fix code with ruff"
-	@echo "make test          - pytest"
-	@echo "make build         - docker build image heart-risk-api:latest"
+	@echo "make pull          - docker pull ${IMAGE}"
+	@echo "make run-image     - docker run -d -p ${PORT:-8000}:8000 ${IMAGE}"
+	@echo "make tag           - tag local image as ${IMAGE}"
+	@echo "make push          - docker push ${IMAGE}"
+	@echo "make open-docs     - open http://localhost:${PORT:-8000}/docs"
+	@echo "make prune         - docker system prune -f"
+	@echo "make install       - install runtime deps from requirements.txt"
+	@echo "make dev-install   - install dev deps (pytest, ruff)"
+	@echo "make dev           - uvicorn --reload (local, no Docker)"
+	@echo "make lint          - ruff check ."
+	@echo "make lint-fix      - ruff check . --fix"
+	@echo "make test          - pytest -q"
+	@echo "make build         - docker build -t heart-risk-api:latest ."
 	@echo "make run           - docker compose up -d"
 	@echo "make logs          - docker compose logs -f"
 	@echo "make down          - docker compose down"
-	@echo "make open          - open page http://localhost:$(PORT)/"
+	@echo "make open          - wait for port and open http://localhost:${PORT:-8000}/"
 	@echo "make run-open      - run + open"
 	@echo "make restart       - docker compose restart"
-	@echo "make clean         - clear cache __pycache__ and .pytest_cache"
+	@echo "make clean         - remove __pycache__ and .pytest_cache"
+	@echo "make doctor        - check docker and ensure .venv exists"
 
-# Full bootstrap: venv + dependencies + image (if in compose specified image:)
-init: doctor
-	$(PY) -m pip install -U pip
-	@if exist requirements.txt $(PY) -m pip install -r requirements.txt
-	@if exist requirements-dev.txt $(PY) -m pip install -r requirements-dev.txt
+# ==== Bootstrap ====
+doctor:
+	@command -v docker >/dev/null 2>&1 || { echo "Docker not found. Install Docker Desktop and restart terminal."; exit 1; }
+	@docker info >/dev/null 2>&1 || { echo "Docker Engine is not running. Start Docker Desktop and try again."; exit 1; }
+	@[ -d .venv ] || python -m venv .venv
+
+
+init: docker-up
+	"$(PY)" -m pip install -U pip
+	@if [ -f requirements.txt ]; then "$(PY)" -m pip install -r requirements.txt; fi
+	@if [ -f requirements-dev.txt ]; then "$(PY)" -m pip install -r requirements-dev.txt; fi
 	-$(DC) pull
 
-# Start container and open UI
-start:
-	$(DC) up -d
-	powershell -NoProfile -Command "while (-not (Test-NetConnection localhost -Port $(PORT) -InformationLevel Quiet)) { Start-Sleep 1 }; Start-Process 'http://localhost:$(PORT)/'"
+# ==== One-click start/stop ====
+start: run open
 
-# Stop container
 stop:
 	$(DC) down
 
-# Local CI
+# ==== Local CI ====
 ci:
-	$(PY) -m ruff check .
-	$(PY) -m pytest -q
+	"$(PY)" -m ruff check .
+	"$(PY)" -m pytest -q
 
-# Download image from dockerhub
+# ==== Image ops ====
 pull:
-	docker pull $(IMAGE)
+	docker pull ${IMAGE}
 
-# Start image bypassing compose
 run-image:
-	docker run -d --name heart_api -p $(PORT):8000 --rm $(IMAGE)
+	docker run -d --name heart_api -p ${PORT:-8000}:8000 --rm ${IMAGE}
 
-# Mark local created image with tag
-# Example: make tag IMAGE=docker.io/you/heart-risk-api:0.1
 tag:
-	docker tag heart-risk-api:latest $(IMAGE)
+	docker tag heart-risk-api:latest ${IMAGE}
 
-# Push image to dockerhub
 push:
-	docker push $(IMAGE)
-
+	docker push ${IMAGE}
 
 open-docs:
-	powershell -NoProfile -Command "Start-Process 'http://localhost:$(PORT)/docs'"
+	@start "" "http://localhost:$${PORT:-8000}/docs"
 
 prune:
 	docker system prune -f
 
-
+# ==== Python deps / dev run ====
 install:
-	$(PY) -m pip install -r requirements.txt
+	@if [ -f requirements.txt ]; then "$(PY)" -m pip install -r requirements.txt; else echo "requirements.txt not found"; fi
 
 dev-install:
-	$(PY) -m pip install -r requirements-dev.txt
+	@if [ -f requirements-dev.txt ]; then "$(PY)" -m pip install -r requirements-dev.txt; else echo "requirements-dev.txt not found"; fi
 
 dev:
-	$(PY) -m uvicorn $(APP) --host 127.0.0.1 --port $(PORT) --reload
+	"$(PY)" -m uvicorn $(APP) --host 127.0.0.1 --port ${PORT:-8000} --reload
 
+# ==== Quality ====
 lint:
-	$(PY) -m ruff check .
+	"$(PY)" -m ruff check .
 
 lint-fix:
-	$(PY) -m ruff check . --fix
+	"$(PY)" -m ruff check . --fix
 
 test:
-	$(PY) -m pytest -q
+	"$(PY)" -m pytest -q
 
+# ==== Docker compose ====
 build:
 	docker build -t heart-risk-api:latest .
 
@@ -108,18 +118,40 @@ logs:
 down:
 	$(DC) down
 
+# Wait for HTTP then open default browser (works from Git Bash on Windows)
 open:
-	powershell -NoProfile -Command "while (-not (Test-NetConnection localhost -Port $(PORT) -InformationLevel Quiet)) { Start-Sleep 1 }; Start-Process 'http://localhost:$(PORT)/'"
+	@until curl -sSf "http://localhost:$${PORT:-8000}/docs" >/dev/null; do sleep 1; done
+	@start "" "http://localhost:$${PORT:-8000}/"
 
 run-open: run open
 
 restart:
 	$(DC) restart
 
+# Clean
 clean:
-	-powershell -NoProfile -Command "if (Test-Path .pytest_cache) { Remove-Item -Recurse -Force .pytest_cache }"
-	-powershell -NoProfile -Command "Get-ChildItem -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force"
+	rm -rf .pytest_cache
+	find . -type d -name "__pycache__" -prune -exec rm -rf {} +
 
-doctor:
-	-powershell -NoProfile -Command "if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { Write-Error 'Docker not found. Install Docker Desktop and restart terminal.'; exit 1 }"
-	-powershell -NoProfile -Command "if (-not (Test-Path .venv)) { Write-Host 'Creating .venv'; python -m venv .venv } else { Write-Host '.venv already exists' }"
+# Start Docker Desktop
+start-docker:
+	@start "" "$${DOCKER_DESKTOP_EXE:-C:\Program Files\Docker\Docker\Docker Desktop.exe}"
+
+# Wait until demon ready
+wait-docker:
+	@until docker info >/dev/null 2>&1; do echo "Waiting for Docker Engine..."; sleep 2; done
+
+# Check and auto-start Docker if possible
+docker-up:
+	@if docker info >/dev/null 2>&1; then \
+	  echo "Docker Engine is running."; \
+	else \
+	  if [ "$(AUTO_START_DOCKER)" = "1" ]; then \
+	    echo "Starting Docker Desktop..."; \
+	    start "" "$${DOCKER_DESKTOP_EXE:-C:\Program Files\Docker\Docker\Docker Desktop.exe}"; \
+	    "$(MAKE)" wait-docker; \
+	  else \
+	    echo "Docker Engine is not running. Start Docker Desktop or run: make start-docker"; \
+	    exit 1; \
+	  fi; \
+	fi

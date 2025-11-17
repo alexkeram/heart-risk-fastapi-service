@@ -6,7 +6,7 @@ services:
     # build: .
     container_name: heart_api
     ports:
-      - "${8000}:8000"
+      - "${PORT:-8000}:8000"
     # model artifacts
     volumes:
       - ./artifacts:/app/artifacts

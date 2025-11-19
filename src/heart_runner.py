@@ -1,5 +1,28 @@
 # file: src/heart_runner.py
 from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
+
+import numpy as np
+import pandas as pd
+import shap
+from catboost import CatBoostClassifier, Pool
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
+from sklearn.metrics import (
+    average_precision_score,
+    confusion_matrix,
+    f1_score,
+    fbeta_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from sklearn.model_selection import StratifiedKFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
+
 """
 HeartRiskRunner — core for training and selecting the best model.
 
@@ -17,84 +40,10 @@ Models:
     • HistGradientBoosting   (key "hgb") — via OHE;
     • RandomForestClassifier (key "rf")  — via OHE.
 
-Usage example:
-    >>> import pandas as pd
-    >>> from heart_runner import HeartRiskRunner, RunCfg
-    >>> df = pd.read_csv("data/heart_train.csv")
-    >>> cfg = RunCfg(target="Heart Attack Risk (Binary)", splits=3, beta=2.0)
-    >>> runner = HeartRiskRunner(cfg)
-    >>> out = runner.run_all(df)
-    >>> out.keys()
-    dict_keys(['results', 'best', 'artifacts'])
-    >>> out["best"]["model_key"], out["best"]["scenario"], out["best"]["m"]["F2"]
-    ('hgb', 'no_leak', 0.7)
-    >>> # trained best model and metadata:
-    >>> art = out["artifacts"]
-    >>> art["model"], art["features"][:5], art["threshold"]
-
-Result structure:
-    out = {
-      "results": [                     # list of all (scenario × model)
-         {
-           "model_key": "cat|hgb|rf",
-           "model_name": "CatBoost|HistGB|RandomForest",
-           "scenario": "no_leak|with_leak",
-           "features": [...],          # features used in this run
-           "cats": [...],              # features treated as categorical
-           "oof": np.ndarray,          # OoF probabilities (length len(y))
-           "thr": float,               # optimal F_beta threshold (on OoF)
-           "m": {                      # OoF metrics at thr
-             "F1", "F2", "ROC_AUC", "PR_AUC",
-             "Precision", "Recall",
-             "TN", "FP", "FN", "TP",
-             "threshold"
-           },
-           "ci": {                     # bootstrap CI (2.5%, 97.5%)
-             "F1": (lo, hi),
-             "F2": (lo, hi),
-             "ROC_AUC": (lo, hi),
-             "PR_AUC": (lo, hi)
-           }
-         },
-         ...
-      ],
-      "best": {... one of results, best by F2 ...},
-      "artifacts": {                   # trained on the full train
-        "model": sklearn/CB model or Pipeline,
-        "model_key": "cat|hgb|rf",
-        "features": [...],             # final set of columns
-        "cats": [...],                 # final categorical features
-        "threshold": float,            # optimal threshold from best OoF
-        "shap_top": pd.Series          # top-20 by |SHAP|
-      }
-    }
-
-Dependencies:
-    numpy, pandas, scikit-learn, catboost, shap
-
 Reproducibility:
     • Fixed seed from RunCfg.seed makes splits and training repeatable.
     • Threshold is tuned on OoF predictions (more stable than hold-out).
 """
-
-import numpy as np
-import pandas as pd
-from dataclasses import dataclass
-from typing import Dict, List, Tuple
-
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import (
-    f1_score, fbeta_score, roc_auc_score, average_precision_score,
-    precision_score, recall_score, confusion_matrix
-)
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
-
-import shap
-from catboost import CatBoostClassifier, Pool
-
 
 # =============================== HELPER FUNCTIONS ===============================
 
@@ -137,7 +86,11 @@ def _make_cat_preproc(cats: List[str]) -> ColumnTransformer:
         verbose_feature_names_out=False
     )
 
-def _tune_thr_fbeta(y_true, p, beta: float, grid=np.linspace(0.01, 0.99, 99)) -> Tuple[float, float]:
+def _tune_thr_fbeta(y_true, p,
+                    beta: float,
+                    grid=np.linspace(0.01,
+                                     0.99,
+                                     99)) -> Tuple[float, float]:
     """Select threshold maximizing F_beta on a value grid. Returns (best_threshold, best_score)."""
     best_t, best = -1.0, -1.0
     for t in grid:
@@ -219,11 +172,17 @@ def _make_cat() -> CatBoostClassifier:
 
 def _make_rf() -> RandomForestClassifier:
     """RandomForest with class balancing, many trees, and fixed seed."""
-    return RandomForestClassifier(n_estimators=500, class_weight="balanced", n_jobs=-1, random_state=42)
+    return RandomForestClassifier(n_estimators=500,
+                                  class_weight="balanced",
+                                  n_jobs=-1,
+                                  random_state=42)
 
 def _make_hgb() -> HistGradientBoostingClassifier:
-    """HistGradientBoosting — fast histogram-based boosting; parameters are moderately conservative."""
-    return HistGradientBoostingClassifier(learning_rate=0.05, max_iter=400, random_state=42)
+    """HistGradientBoosting — fast histogram-based boosting;
+     parameters are moderately conservative."""
+    return HistGradientBoostingClassifier(learning_rate=0.05,
+                                          max_iter=400,
+                                          random_state=42)
 
 
 # =============================== MAIN CLASS ===============================
@@ -243,7 +202,9 @@ class RunCfg:
         shap_n:   size of random subset for SHAP calculation (speeds up computation).
     """
     target: str = "Heart Attack Risk (Binary)"
-    leaks: Tuple[str, ...] = ('Troponin', 'CK-MB', 'Previous Heart Problems', 'Medication Use')
+    leaks: Tuple[str, ...] = ('Troponin', 'CK-MB',
+                              'Previous Heart Problems',
+                              'Medication Use')
     seed: int = 42
     splits: int = 3
     beta: float = 2.0
@@ -253,7 +214,8 @@ class RunCfg:
 class HeartRiskRunner:
     """
     Experiment launcher: prepares data, runs models across scenarios, selects the best,
-    and trains it on all data. Returns dictionaries with OoF predictions, metrics, CIs and artifacts.
+    and trains it on all data. Returns dictionaries with OoF predictions, metrics,
+    CIs and artifacts.
     """
 
     def __init__(self, cfg: RunCfg):
@@ -389,7 +351,9 @@ class HeartRiskRunner:
 
             # SHAP for CatBoost: take matrix without last base value column
             idx = self.rng.choice(len(Xb), size=min(self.cfg.shap_n, len(Xb)), replace=False)
-            pool_shap = Pool(Xb.iloc[idx], label=y.iloc[idx], cat_features=[Xb.columns.get_loc(c) for c in cats])
+            pool_shap = Pool(Xb.iloc[idx],
+                             label=y.iloc[idx],
+                             cat_features=[Xb.columns.get_loc(c) for c in cats])
             shap_vals = mdl.get_feature_importance(pool_shap, type="ShapValues")[:, :-1]
             mean_abs = np.abs(shap_vals).mean(axis=0)
             s = pd.Series(mean_abs, index=Xb.columns).sort_values(ascending=False)

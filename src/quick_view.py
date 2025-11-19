@@ -18,8 +18,9 @@ Notes
 from __future__ import annotations
 
 from typing import Optional, Sequence
-import pandas as pd
+
 import matplotlib.pyplot as plt
+import pandas as pd
 
 
 class QuickView:
@@ -27,8 +28,10 @@ class QuickView:
     Fast "manual EDA" overview of a DataFrame.
 
     What it does:
-      1) quick_overview()  — prints general overview: head, shape, dtypes, missing, duplicates, target balance.
-      2) quick_details()   — prints describe, min/max, value frequencies for categorical/low-cardinality features, correlations with target.
+      1) quick_overview()  — prints general overview: head, shape,
+                             dtypes, missing, duplicates, target balance.
+      2) quick_details()   — prints describe, min/max, value frequencies
+                             for categorical/low-cardinality features, correlations with target.
       3) quick_plots()     — draws histograms for all numeric features.
       4) quick_boxplots()  — draws boxplots of numeric features grouped by target classes.
       5) report()          — runs all of the above in sequence.
@@ -36,10 +39,12 @@ class QuickView:
     __init__ parameters:
       df         : pandas.DataFrame, source data.
       target     : name of target (can be None; used for balance/correlations/boxplot).
-      max_unique : cardinality threshold below which a feature is treated as "categorical" for frequencies.
+      max_unique : cardinality threshold below which
+                   a feature is treated as "categorical" for frequencies.
     """
 
-    def __init__(self, df: pd.DataFrame, target: Optional[str] = None, max_unique: int = 10) -> None:
+    def __init__(self, df: pd.DataFrame, target: Optional[str] = None,
+                 max_unique: int = 10) -> None:
         # Store parameters. Original DataFrame is not modified.
         self.df = df
         self.target = target
@@ -187,7 +192,7 @@ class QuickView:
         """
         y = self.target
         if not y or y not in self.df.columns:
-            print("\nquick_boxplots: specify a valid target (self.target) and ensure it exists in df.")
+            print("\nquick_boxplots: specify a target (self.target) and ensure it exists in df.")
             return
 
         # Drop possible service ID columns

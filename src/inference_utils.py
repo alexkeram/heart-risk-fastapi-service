@@ -1,6 +1,16 @@
 # file: src/inference_utils.py
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Dict, Iterable, Optional
+
+import joblib
+import pandas as pd
+from catboost import CatBoostClassifier, Pool
+
+from src.eda_analyzer import EDAAnalyzer
+
 """
 HeartRiskInference — production wrapper for heart attack risk inference.
 
@@ -54,15 +64,7 @@ Notes
 • For sklearn (RF/HGB) the saved pipeline (preproc + model) is loaded via joblib.
 """
 
-from pathlib import Path
-from typing import Optional, Iterable, Dict
 
-import json
-import joblib
-import pandas as pd
-from catboost import CatBoostClassifier, Pool
-
-from src.eda_analyzer import EDAAnalyzer
 
 
 class HeartRiskInference:
@@ -103,7 +105,8 @@ class HeartRiskInference:
         """
         Load model and metadata from the artifacts folder.
 
-        By default searches `<repo_root>/artifacts` (where `<repo_root>` is the folder containing `src/`).
+        By default searches `<repo_root>/artifacts` (where `<repo_root>`
+        is the folder containing `src/`).
 
         Args:
             artifacts_dir: alternative path to the artifacts directory.

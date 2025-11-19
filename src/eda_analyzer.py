@@ -1,7 +1,7 @@
 # file: src/eda_analyzer.py
 from __future__ import annotations
 
-from typing import Optional, List
+from typing import List, Optional
 
 import pandas as pd
 
@@ -29,15 +29,9 @@ class EDAAnalyzer:
          - numeric columns (except target) with median,
          - `Stress Level` with integer median,
          - `Diet` adds category `'Unknown'` and fills missing with it.
-      8) `report()` gives a summary; `process()` runs the steps sequentially and returns the cleaned DataFrame.
+      8) `report()` gives a summary; `process()` runs the steps sequentially and returns
+        the cleaned DataFrame.
 
-    Example
-    -------
-    >>> import pandas as pd
-    >>> raw = pd.DataFrame({"Gender": ["male", "female", None], "BMI": [24.2, 31.1, None], "id": [1, 2, 3]})
-    >>> clean = EDAAnalyzer(raw, target_col=None).process()
-    >>> list(clean.columns)
-    ['Gender', 'BMI']
     """
 
     # block columns to detect rows where the entire questionnaire block is missing
@@ -92,11 +86,13 @@ class EDAAnalyzer:
             self.df["Diet"] = self.df["Diet"].round().astype("Int16").astype("category")
 
         if "Stress Level" in self.df.columns:
-            self.df["Stress Level"] = pd.to_numeric(self.df["Stress Level"], errors="coerce").round().astype("Int16")
+            self.df["Stress Level"] = pd.to_numeric(self.df["Stress Level"],
+                                                    errors="coerce").round().astype("Int16")
 
         if "Physical Activity Days Per Week" in self.df.columns:
             self.df["Physical Activity Days Per Week"] = (
-                pd.to_numeric(self.df["Physical Activity Days Per Week"], errors="coerce").round().astype("Int16")
+                pd.to_numeric(self.df["Physical Activity Days Per Week"],
+                              errors="coerce").round().astype("Int16")
             )
 
     # ----------------------------- pipeline steps -----------------------------
@@ -218,7 +214,8 @@ class EDAAnalyzer:
 
     def process(self) -> pd.DataFrame:
         """
-        Sequentially runs `missing_values()` - `cast_dtypes()` - `impute_minimal()` and returns the cleaned DataFrame.
+        Sequentially runs `missing_values()` - `cast_dtypes()` - `impute_minimal()`
+        and returns the cleaned DataFrame.
         """
         self.missing_values()
         self.cast_dtypes()

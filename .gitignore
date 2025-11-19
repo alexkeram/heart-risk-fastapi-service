@@ -18,8 +18,7 @@ models/
 *.joblib
 *.onnx
 *.h5
-
-!data/.gitkeep
+logs/
 !models/.gitkeep
 
 # Notebooks cache

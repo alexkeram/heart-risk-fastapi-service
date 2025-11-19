@@ -13,13 +13,16 @@ What it does:
     Class '0': <n_neg> (<pct_neg>%)
 
 Where:
-  - inf — object with methods/fields: predict(df) -> DataFrame[c("proba","prediction")], threshold: float
+  - inf — object with methods/fields: predict(df) -> DataFrame[c("proba",
+  "prediction")], threshold: float
   - df  — DataFrame with raw data for inference
 
 """
 
 from __future__ import annotations
-from typing import Dict, Any
+
+from typing import Any, Dict
+
 import pandas as pd
 
 

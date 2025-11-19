@@ -1,16 +1,16 @@
 # file: src/heart_job.py
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional, Dict, List
-
 import json
+from pathlib import Path
+from typing import Dict, List, Optional
+
 import joblib
 import pandas as pd
 
 # IPython may be absent in some environments
 try:
-    from IPython.display import display, Markdown  # type: ignore
+    from IPython.display import Markdown, display  # type: ignore
     _HAVE_IPY = True
 except Exception:  # pragma: no cover
     _HAVE_IPY = False
@@ -31,14 +31,16 @@ class HeartRiskJob:
 
     Responsible for:
       1) Data preprocessing (via `EDAAnalyzer`).
-      2) Iterating/evaluating models with cross-validation and selecting the best one (via `HeartRiskRunner`).
+      2) Iterating/evaluating models with cross-validation and selecting
+         the best one (via `HeartRiskRunner`).
       3) Generating reports (table of all combinations and summary of the best).
       4) Saving the best model artifacts to `<project_root>/artifacts`.
 
     `artifacts/` folder
     -------------------
     Contains:
-      - `best_meta.json` — metadata (model type, features, cats, threshold, **file name** of the model),
+      - `best_meta.json` — metadata (model type, features, cats, threshold,
+                                    file name of the model),
       - `best_model.cbm` or `best_model.joblib` — the model file itself.
     `meta["model_path"]` stores only the **file name** without an absolute path.
 
@@ -232,7 +234,8 @@ class HeartRiskJob:
         rep = pd.DataFrame(rows).sort_values(["model", "scenario"]).reset_index(drop=True)
 
         def _fmt(df: pd.DataFrame) -> pd.DataFrame:
-            for c in ["F2", "F1", "ROC_AUC", "PR_AUC", "Precision", "Recall", "threshold", "FP/1000", "FN/1000"]:
+            for c in ["F2", "F1", "ROC_AUC", "PR_AUC", "Precision",
+                      "Recall", "threshold", "FP/1000", "FN/1000"]:
                 if c in df.columns:
                     df[c] = df[c].astype(float).round(4)
             return df
@@ -282,7 +285,9 @@ class HeartRiskJob:
 
     def _echo_saved_meta(self, meta: Dict) -> None:
         """Nicely show saved metadata (via IPython) or print JSON as plain text."""
-        text = "**Artifacts saved**:\n\n```json\n" + json.dumps(meta, ensure_ascii=False, indent=2) + "\n```"
+        text = "**Artifacts saved**:\n\n```json\n" + json.dumps(meta,
+                                                                ensure_ascii=False,
+                                                                indent=2) + "\n```"
         if _HAVE_IPY:
             display(Markdown(text))
         else:  # pragma: no cover

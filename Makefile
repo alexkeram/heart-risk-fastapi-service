@@ -48,7 +48,6 @@ doctor:
 	@docker info >/dev/null 2>&1 || { echo "Docker Engine is not running. Start Docker Desktop and try again."; exit 1; }
 	@[ -d .venv ] || python -m venv .venv
 
-
 init: docker-up
 	"$(PY)" -m pip install -U pip
 	@if [ -f requirements.txt ]; then "$(PY)" -m pip install -r requirements.txt; fi
@@ -93,7 +92,7 @@ dev-install:
 	@if [ -f requirements-dev.txt ]; then "$(PY)" -m pip install -r requirements-dev.txt; else echo "requirements-dev.txt not found"; fi
 
 dev:
-	"$(PY)" -m uvicorn $(APP) --host 127.0.0.1 --port ${PORT:-8000} --reload
+	"$(PY)" -m uvicorn $(APP) --host 127.0.0.1 --port $(PORT) --reload
 
 # ==== Quality ====
 lint:

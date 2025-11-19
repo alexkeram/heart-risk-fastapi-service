@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Train — Heart Risk</title>
+  <link rel="stylesheet" href="/static/style.css?v={{ version }}">
+</head>
+<body>
+  <header>
+    <h1>Heart Risk — Train</h1>
+    <nav>
+      <a href="/">Inference</a> |
+      <a href="/train">Train</a>
+    </nav>
+  </header>
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  {% if ok %}
+    <div class="ok">
+      Model trained. Rows: {{ rows }}. Model key: {{ model_key }}. Version: {{ model_version }}.
+    </div>
+  {% endif %}
+
+  <section>
+    <h2>Upload training CSV</h2>
+    <form action="/train" method="post" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".csv" required>
+      <button type="submit">Train</button>
+    </form>
+  </section>
+</body>
+</html>

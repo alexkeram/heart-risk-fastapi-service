@@ -1,5 +1,9 @@
 services:
   api:
+    environment:
+      - PORT=${PORT:-8000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FILE=${LOG_FILE:-logs/app.log}
     # docker image from dockerhub
     image: ${IMAGE}
     # local build, uncomment if you want to create your image locally
@@ -10,4 +14,5 @@ services:
     # model artifacts
     volumes:
       - ./artifacts:/app/artifacts
+      - ./logs:/app/logs
     restart: unless-stopped

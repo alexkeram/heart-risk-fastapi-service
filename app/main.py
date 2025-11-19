@@ -16,7 +16,6 @@ from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
 from typing import List, Union
-from fastapi import Form
 from src.heart_job import HeartRiskJob
 from src.heart_runner import RunCfg
 
@@ -33,6 +32,7 @@ from src.inference_utils import HeartRiskInference
 
 # ---- logging ------------------------------------------------
 from app.logging_config import setup_logging
+from app.metrics import Metrics
 import logging
 from time import perf_counter
 from uuid import uuid4
@@ -59,6 +59,8 @@ async def lifespan(app: FastAPI):
     """
     app.state.inf = HeartRiskInference.from_dir(ARTIFACTS_DIR)
     app.state.last_result = None  # store last computed DataFrame (for /download)
+    app.state.metrics = Metrics(window_size=500)
+
     # log startup
     try:
         meta = getattr(app.state.inf, "meta", None)
@@ -95,6 +97,14 @@ async def request_logging(request: Request, call_next):
     try:
         response = await call_next(request)
         dt_ms = int((perf_counter() - start) * 1000)
+
+        # metrics
+        try:
+            if request.url.path in {"/", "/api/predict_path", "/api/predict_file"} and response.status_code < 500:
+                app.state.metrics.observe(dt_ms)
+        except Exception:
+            logger.exception("metrics_observe_failed", extra={"event": "error", "rid": rid})
+
         logger.info(
             "request",
             extra={
@@ -113,6 +123,7 @@ async def request_logging(request: Request, call_next):
             extra={"event": "error", "rid": rid, "path": request.url.path},
         )
         raise
+
 
 # ====================== Pydantic schemas for JSON ============================
 
@@ -398,6 +409,18 @@ async def train_upload(request: Request, file: UploadFile = File(...)):
             "train.html",
             {"request": request, "ok": False, "error": f"Training error: {e}", "version": APP_VERSION},
         )
+
+@app.get("/metrics")
+async def metrics():
+    """
+    Summary metrics for service performance.
+    Format: JSON with requests_total, latency_p95_ms, window_size, n_samples.
+    p95=None if observations < 20.
+    """
+    snap = getattr(app.state, "metrics", None)
+    if snap is None:
+        return {"requests_total": 0, "latency_p95_ms": None, "window_size": 500, "n_samples": 0}
+    return app.state.metrics.snapshot()
 
 
 # ---------- Download last result (CSV) --------------------------------------

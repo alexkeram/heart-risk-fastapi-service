@@ -1,4 +1,6 @@
-# Heart Risk Classification
+# ML Inference Service & CI/CD (FastAPI, Docker, GitHub Actions)
+Developed a production-ready REST API for model serving with integrated observability metrics (latency, request counts). Built a rigorous CI pipeline including linting (ruff), unit testing (pytest), and contract tests to ensure deployment reliability.
+
 
 Heart Risk Classification is an end-to-end data project: from data exploration and training, through packaging model artifacts, to a reproducible API service with logging, metrics, tests, Docker, Makefile automation and CI.
 
